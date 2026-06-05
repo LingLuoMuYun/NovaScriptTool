@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Novel {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String
+  content   String   @db.Text
+  status    String   @default("draft")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  characters Character[]
+  scenes     Scene[]
+
+  @@map("novels")
+}
+
+model Character {
+  id       String   @id @default(uuid()) @db.Uuid
+  novelId  String   @map("novel_id") @db.Uuid
+  name     String
+  aliases  String[]
+  roleType String   @map("role_type")
+  traits   Json     @default("{}")
+
+  novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+
+  @@map("characters")
+}
+
+model Scene {
+  id        String @id @default(uuid()) @db.Uuid
+  novelId   String @map("novel_id") @db.Uuid
+  sceneNum  Int    @map("scene_num")
+  location  String
+  timeOfDay String @map("time_of_day")
+
+  novel   Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  scripts Script[]
+
+  @@map("scenes")
+}
+
+model Script {
+  id          String   @id @default(uuid()) @db.Uuid
+  sceneId     String   @map("scene_id") @db.Uuid
+  yamlContent String   @map("yaml_content") @db.Text
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  scene Scene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@map("scripts")
+}
