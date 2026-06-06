@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "db:seed": "tsx src/seed.ts",
+    "db:reset": "rm -f prisma/dev.db && npx prisma migrate dev && tsx src/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -13,7 +13,14 @@ const PORT = process.env.PORT || 4000;
 // --- 中间件 ---
 
 app.use(cors());
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "5mb", type: "application/json" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+
+// 强制 UTF-8 编码
+app.use((_req, res, next) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  next();
+});
 
 // 文件上传配置
 const upload = multer({

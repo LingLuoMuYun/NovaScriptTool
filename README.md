@@ -172,6 +172,14 @@ npx prisma migrate dev --name init
 
 执行成功后，`backend/prisma/dev.db` 文件会自动创建。
 
+**（可选）插入示例数据：**
+```bash
+npm run db:seed
+```
+这会清空旧数据并插入一篇示例小说《青云剑仙》（约 700 字），方便快速体验。
+
+> **编码注意**：数据库使用 UTF-8 存储。如果在终端中用 `curl` 测试中文，请确保终端编码为 UTF-8（Windows 建议用 PowerShell 或 Windows Terminal）。浏览器前端上传不受影响。
+
 ### 4. 启动服务
 
 **后端**（端口 4000）：
