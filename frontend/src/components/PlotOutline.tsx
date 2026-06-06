@@ -1,5 +1,7 @@
 "use client";
 
+import ConflictChart from "./ConflictChart";
+
 interface PlotOutlineProps {
   analysis: {
     outline?: { opening: string; development: string; climax: string; ending: string };
@@ -83,6 +85,7 @@ export default function PlotOutline({ analysis }: PlotOutlineProps) {
                 <p className="text-sm text-gray-700">{c.description}</p>
               </div>
             ))}
+            <ConflictChart conflicts={conflicts} />
           </div>
         </div>
       )}

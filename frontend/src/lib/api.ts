@@ -303,3 +303,74 @@ export function runIncrementalPipeline(
     body: JSON.stringify({ sceneNums }),
   });
 }
+
+// ─── P1 分析增强 API ──────────────────────────────────
+
+export interface DialogueDensityItem {
+  sceneNum: number;
+  location: string;
+  dialogueLines: number;
+  actionLines: number;
+  density: number | null;
+}
+
+export function getDialogueDensity(novelId: string): Promise<DialogueDensityItem[]> {
+  return request(`/api/novels/${novelId}/dialogue-density`);
+}
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  roleType: string;
+  group: string;
+  importance: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  relation: string;
+  weight: number;
+}
+
+export interface RelationshipGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export function getRelationshipGraph(novelId: string): Promise<RelationshipGraphData> {
+  return request(`/api/novels/${novelId}/relationship-graph`);
+}
+
+export interface HeatmapCharacter {
+  name: string;
+  roleType: string;
+}
+
+export interface HeatmapScene {
+  sceneNum: number;
+  location: string;
+}
+
+export interface HeatmapData {
+  characters: HeatmapCharacter[];
+  scenes: HeatmapScene[];
+  matrix: number[][];
+}
+
+export function getCharacterHeatmap(novelId: string): Promise<HeatmapData> {
+  return request(`/api/novels/${novelId}/character-heatmap`);
+}
+
+export interface EmotionPoint {
+  sceneNum: number;
+  location: string;
+  positive: number;
+  negative: number;
+  tension: number;
+  dominant: "positive" | "negative" | "tension" | "neutral";
+}
+
+export function getEmotionCurve(novelId: string): Promise<EmotionPoint[]> {
+  return request(`/api/novels/${novelId}/emotion-curve`);
+}

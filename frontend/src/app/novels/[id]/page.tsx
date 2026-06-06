@@ -13,6 +13,7 @@ import PipelineProgress from "@/components/PipelineProgress";
 import AnnotationPanel from "@/components/AnnotationPanel";
 import ImpactDialog from "@/components/ImpactDialog";
 import SceneEditor from "@/components/SceneEditor";
+import AnalysisDashboard from "@/components/AnalysisDashboard";
 import { buildDeps, analyzeImpact, runIncrementalPipeline } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -27,7 +28,7 @@ export default function NovelDetailPage() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
-  const [activeTab, setActiveTab] = useState<"info" | "plot" | "characters" | "scenes" | "annotations">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "analysis" | "characters" | "scenes" | "annotations">("info");
   const [selectedScene, setSelectedScene] = useState<SceneWithScripts | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
@@ -461,7 +462,7 @@ export default function NovelDetailPage() {
       <div className="mb-6 flex gap-2 border-b border-gray-200">
         {[
           { key: "info", label: "📖 原文" },
-          { key: "plot", label: "📊 剧情分析" },
+          { key: "analysis", label: "📊 分析" },
           { key: "characters", label: `👥 角色 (${characters.length})` },
           { key: "scenes", label: `🎬 场景 (${scenes.length})` },
           { key: "annotations", label: "💬 注记" },
@@ -494,10 +495,20 @@ export default function NovelDetailPage() {
         </div>
       )}
 
-      {activeTab === "plot" && (
-        analysis ? <PlotOutline analysis={analysis} /> : (
-          <EmptyTab emoji="📊" title="尚未进行剧情分析" desc="点击上方按钮开始 AI 分析" />
-        )
+      {activeTab === "analysis" && (
+        <AnalysisDashboard
+          novelId={id}
+          analysis={analysis}
+          sceneCount={scenes.length}
+          characterCount={characters.length}
+          onSceneClick={(sceneNum: number) => {
+            const scene = scenes.find((s) => s.sceneNum === sceneNum);
+            if (scene) {
+              setSelectedScene(scene);
+              setActiveTab("scenes");
+            }
+          }}
+        />
       )}
 
       {activeTab === "characters" && (
