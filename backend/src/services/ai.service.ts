@@ -63,8 +63,32 @@ export async function chatCompletion(
   }
 
   const choice = (response as OpenAI.Chat.Completions.ChatCompletion).choices[0];
+
+  // 检测 Mimo 内容安全拦截
+  const finishReason = choice.finish_reason;
+  if (finishReason === "content_filter" || finishReason === "sensitive") {
+    throw new Error(
+      `⚠️ 内容安全审核未通过：AI 平台判定该文本包含高风险内容，已拦截。\n` +
+        `建议：1) 缩短文本长度（控制在 5000 字以内） 2) 尝试上传更温和的章节片段 3) 联系 Mimo 平台了解内容策略`
+    );
+  }
+
+  const rawContent = choice.message.content || "";
+
+  // 有些安全拦截不会设置 finish_reason，而是直接在 content 中返回英文拒绝信息
+  if (
+    rawContent.includes("rejected") &&
+    (rawContent.includes("high risk") || rawContent.includes("unsafe") || rawContent.includes("blocked"))
+  ) {
+    throw new Error(
+      `⚠️ 内容安全审核未通过：AI 平台拒绝了该请求。\n` +
+        `原始信息: ${rawContent.substring(0, 200)}\n` +
+        `建议：1) 缩短文本 2) 尝试不同内容的片段 3) 联系 Mimo 平台`
+    );
+  }
+
   return {
-    content: choice.message.content || "",
+    content: rawContent,
     reasoning: (choice.message as any).reasoning_content as string | undefined,
     usage: response.usage,
     model: response.model,
@@ -206,6 +230,21 @@ ${JSON.stringify(charactersInScene)}
  * 处理常见格式：纯 JSON、markdown 代码块包裹、含 reasoning 前缀等
  */
 export function parseAIJson(content: string): any {
+  // 预检：安全拦截 / 服务端错误文本
+  const lower = content.toLowerCase();
+  if (
+    lower.includes("rejected") ||
+    lower.includes("high risk") ||
+    lower.includes("unsafe") ||
+    lower.includes("blocked") ||
+    lower.includes("content filter")
+  ) {
+    throw new Error(
+      `⚠️ AI 平台安全拦截：请求被判定为高风险内容。\n原始响应: ${content.substring(0, 300)}\n` +
+        `建议：1) 减少文本中的暴力/冲突描写 2) 缩短上传文本至 5000 字以内 3) 分章节逐步分析`
+    );
+  }
+
   // 尝试直接解析
   try {
     return JSON.parse(content);
@@ -270,6 +309,7 @@ export interface AnalysisResult {
 /**
  * 执行 Agent 1 + Agent 2 分析流水线
  * Agent 1: 剧情解构 → Agent 2: 角色图谱
+ * 内置降级策略：如遇安全拦截，自动缩短文本并关闭思维模式重试
  */
 export async function runAnalysisPipeline(novelContent: string): Promise<AnalysisResult> {
   // 文本预处理：如果太长，取前 15000 字做分析
@@ -277,15 +317,101 @@ export async function runAnalysisPipeline(novelContent: string): Promise<Analysi
     ? novelContent.substring(0, 15000) + "\n\n[文本过长，已截取前15000字分析...]"
     : novelContent;
 
+  // 尝试主策略
+  try {
+    return await _doAnalysis(truncatedContent, { thinking: true });
+  } catch (err: any) {
+    const msg = err.message || "";
+
+    // 判断是否为安全拦截
+    if (msg.includes("安全") || msg.includes("rejected") || msg.includes("high risk") || msg.includes("content_filter")) {
+      console.log("  ⚠️ 主策略被安全拦截，尝试降级策略（更短文本 + 关闭思维链）...");
+
+      // 降级策略：更短文本 + 关闭思维模式
+      const fallbackContent = truncatedContent.length > 5000
+        ? truncatedContent.substring(0, 5000) + "\n\n[安全降级：已截取前5000字]"
+        : truncatedContent.substring(0, Math.floor(truncatedContent.length * 0.6));
+
+      try {
+        return await _doAnalysis(fallbackContent, { thinking: false });
+      } catch (fallbackErr: any) {
+        const fbMsg = fallbackErr.message || "";
+        if (fbMsg.includes("安全") || fbMsg.includes("rejected") || fbMsg.includes("high risk")) {
+          throw new Error(
+            `⚠️ 内容多次被 AI 平台安全拦截，无法完成分析。\n` +
+              `可能原因：文本包含较多暴力/冲突/敏感描写。\n` +
+              `建议：1) 尝试上传更短、更温和的章节（3000 字以内） 2) 更换小说内容 3) 联系 Mimo 平台了解内容审核策略`
+          );
+        }
+        throw fallbackErr;
+      }
+    }
+
+    // 非安全拦截的错误，直接抛出
+    throw err;
+  }
+}
+
+/** 内部：执行实际的分析调用 */
+async function _doAnalysis(
+  content: string,
+  options: { thinking: boolean }
+): Promise<AnalysisResult> {
   // Agent 1: 剧情解构
   console.log("  🧠 Agent 1: 剧情解构中...");
-  const plotResponse = await analyzePlot(truncatedContent);
+  const plotResponse = await chatCompletion(
+    [
+      {
+        role: "system",
+        content: `你是一位资深的剧本分析师。请通读以下小说内容，完成以下任务：
+1. 提取核心故事大纲（包含起因、发展、高潮、结局）
+2. 梳理全局时间线（按时间顺序列出关键事件节点）
+3. 识别主要剧情冲突与转折点
+
+请以 JSON 格式输出，结构如下：
+{
+  "outline": { "opening": "...", "development": "...", "climax": "...", "ending": "..." },
+  "timeline": [{ "order": 1, "event": "...", "chapter": "..." }],
+  "conflicts": [{ "type": "...", "description": "...", "parties": ["..."] }]
+}`,
+      },
+      { role: "user", content },
+    ],
+    { responseFormat: "json_object", thinking: options.thinking }
+  );
   const plotData = parseAIJson(plotResponse.content);
   console.log("  ✅ Agent 1 完成");
 
   // Agent 2: 角色图谱
   console.log("  🧠 Agent 2: 角色提取中...");
-  const charResponse = await analyzeCharacters(truncatedContent);
+  const charResponse = await chatCompletion(
+    [
+      {
+        role: "system",
+        content: `你是一位专业的影视角色分析师。请从以下小说内容中提取所有重要角色，为每个角色构建详细档案。
+
+请以 JSON 格式输出，结构如下：
+{
+  "characters": [
+    {
+      "name": "角色姓名",
+      "aliases": ["别名1", "别名2"],
+      "roleType": "主角/配角/反派/路人",
+      "traits": {
+        "identity": "身份背景",
+        "personality": ["性格标签"],
+        "goal": "当前阶段目标",
+        "motivation": "行为动机",
+        "relationships": [{"with": "关联角色", "relation": "关系描述"}]
+      }
+    }
+  ]
+}`,
+      },
+      { role: "user", content },
+    ],
+    { responseFormat: "json_object", thinking: options.thinking }
+  );
   const charData = parseAIJson(charResponse.content);
   console.log("  ✅ Agent 2 完成");
 
@@ -316,12 +442,13 @@ export interface GeneratedScript {
 /**
  * 执行 Agent 3 + Agent 4 场景生成流水线
  * Agent 3: 场景规划 → Agent 4: 逐场景剧本生成
+ * 内置降级策略：如遇安全拦截，自动缩短文本重试
  */
 export async function runScriptGenerationPipeline(
   novelContent: string,
   characters: { name: string; roleType: string; traits: any }[]
 ): Promise<{ scenes: GeneratedScene[]; scripts: GeneratedScript[] }> {
-  const truncatedContent = novelContent.length > 12000
+  let truncatedContent = novelContent.length > 12000
     ? novelContent.substring(0, 12000) + "\n\n[文本截取]"
     : novelContent;
 
@@ -331,11 +458,25 @@ export async function runScriptGenerationPipeline(
     personality: c.traits?.personality || [],
   }));
 
-  // Agent 3: 场景规划
-  console.log("  🎬 Agent 3: 场景规划中...");
-  const sceneResponse = await planScenes(truncatedContent, charSummary);
-  const sceneData = parseAIJson(sceneResponse.content);
-  console.log(`  ✅ Agent 3 完成 (${sceneData.scenes?.length || 0} 个场景)`);
+  // Agent 3: 场景规划（带降级）
+  let sceneData: any;
+  try {
+    console.log("  🎬 Agent 3: 场景规划中...");
+    const sceneResponse = await planScenes(truncatedContent, charSummary);
+    sceneData = parseAIJson(sceneResponse.content);
+    console.log(`  ✅ Agent 3 完成 (${sceneData.scenes?.length || 0} 个场景)`);
+  } catch (err: any) {
+    const msg = err.message || "";
+    if (msg.includes("安全") || msg.includes("rejected") || msg.includes("high risk")) {
+      console.log("  ⚠️ 场景规划被拦截，尝试更短文本...");
+      truncatedContent = truncatedContent.substring(0, Math.floor(truncatedContent.length * 0.5));
+      const retryResponse = await planScenes(truncatedContent, charSummary);
+      sceneData = parseAIJson(retryResponse.content);
+      console.log(`  ✅ Agent 3 降级完成 (${sceneData.scenes?.length || 0} 个场景)`);
+    } else {
+      throw err;
+    }
+  }
 
   const scenes: GeneratedScene[] = (sceneData.scenes || []).map((s: any, i: number) => ({
     sceneNum: s.sceneNum || i + 1,
@@ -357,16 +498,31 @@ export async function runScriptGenerationPipeline(
     }
 
     console.log(`  ✍️ Agent 4: 生成场景 ${scene.sceneNum} 剧本...`);
-    const scriptResponse = await writeScript(scene, sceneChars);
-    const scriptData = parseAIJson(scriptResponse.content);
-    console.log(`  ✅ 场景 ${scene.sceneNum} 剧本完成`);
+    try {
+      const scriptResponse = await writeScript(scene, sceneChars);
+      const scriptData = parseAIJson(scriptResponse.content);
+      console.log(`  ✅ 场景 ${scene.sceneNum} 剧本完成`);
 
-    scripts.push({
-      sceneNum: scene.sceneNum,
-      location: scene.location,
-      timeOfDay: scene.timeOfDay,
-      scriptYaml: scriptData.script || JSON.stringify(scriptData),
-    });
+      scripts.push({
+        sceneNum: scene.sceneNum,
+        location: scene.location,
+        timeOfDay: scene.timeOfDay,
+        scriptYaml: scriptData.script || JSON.stringify(scriptData),
+      });
+    } catch (err: any) {
+      const msg = err.message || "";
+      if (msg.includes("安全") || msg.includes("rejected") || msg.includes("high risk")) {
+        console.log(`  ⚠️ 场景 ${scene.sceneNum} 被安全拦截，使用占位剧本`);
+        scripts.push({
+          sceneNum: scene.sceneNum,
+          location: scene.location,
+          timeOfDay: scene.timeOfDay,
+          scriptYaml: `# ⚠️ 该场景因内容安全审核未通过，未能生成剧本\n# 请尝试缩短原文章节后重试\nscene:\n  number: ${scene.sceneNum}\n  location: "${scene.location}"\n  time_of_day: "${scene.timeOfDay}"\n  script: "# 待生成"\n`,
+        });
+      } else {
+        throw err;
+      }
+    }
   }
 
   return { scenes, scripts };

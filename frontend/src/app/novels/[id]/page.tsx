@@ -224,7 +224,12 @@ export default function NovelDetailPage() {
           </button>
         )}
 
-        {genError && <p className="text-sm text-red-600">❌ {genError}</p>}
+        {genError && (
+          <div className="w-full rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-medium text-red-700">❌ 操作失败</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-red-600">{genError}</p>
+          </div>
+        )}
         {pipelineStep && !genError && (
           <p className="text-sm text-indigo-600">{pipelineStep}</p>
         )}
