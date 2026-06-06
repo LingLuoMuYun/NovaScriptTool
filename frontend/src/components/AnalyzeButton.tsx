@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 interface AnalyzeButtonProps {
   novelId: string;
   onAnalyzed: (result: any) => void;
@@ -15,7 +17,7 @@ export default function AnalyzeButton({ novelId, onAnalyzed }: AnalyzeButtonProp
     setError("");
     setAnalyzing(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/novels/${novelId}/analyze`, {
+      const res = await fetch(`${API_BASE}/api/novels/${novelId}/analyze`, {
         method: "POST",
       });
       if (!res.ok) {
