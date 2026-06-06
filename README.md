@@ -384,6 +384,19 @@ lsof -ti:4000 | xargs kill -9
 
 Mimo 默认开启思维链，token 消耗在推理上。调用时设置 `"thinking": false` 或在代码中增大 `maxTokens`。
 
+### Q: 页面打开是空白，控制台报 `Cannot find module './682.js'`？
+
+`next build`（生产构建）会在 `.next` 目录生成缓存，这些缓存与 `next dev`（开发服务器）的 webpack 模块引用冲突。
+
+**修复方法**：
+```bash
+cd frontend
+rm -rf .next
+npm run dev
+```
+
+> `.next` 已在 `.gitignore` 中排除，该目录可随时安全删除。
+
 ### Q: 如何重置数据库？
 
 ```bash
