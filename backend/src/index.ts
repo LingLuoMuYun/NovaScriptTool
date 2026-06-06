@@ -1,14 +1,43 @@
 import express from "express";
 import cors from "cors";
+import multer from "multer";
+import path from "path";
 import { PrismaClient } from "@prisma/client";
 import { mimoClient, chatCompletion } from "./services/ai.service";
+import { cleanText, splitChapters, chunkByChars, analyzeText } from "./utils/text-processor";
 
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// --- 中间件 ---
+
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
+
+// 文件上传配置
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, "..", "uploads"),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + "-" + Buffer.from(file.originalname, "latin1").toString("utf8"));
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".txt", ".md", ".json"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`不支持的文件格式: ${ext}，仅支持 ${allowed.join(", ")}`));
+    }
+  },
+});
+
+// 静态文件服务
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 // --- 基础 ---
 
@@ -99,31 +128,153 @@ app.post("/api/ai/write-script", async (req, res) => {
 
 // 获取所有小说
 app.get("/api/novels", async (_req, res) => {
-  const novels = await prisma.novel.findMany({ orderBy: { createdAt: "desc" } });
-  res.json(novels);
+  try {
+    const novels = await prisma.novel.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { characters: true, scenes: true } } },
+    });
+    res.json(novels);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// 创建小说
-app.post("/api/novels", async (req, res) => {
-  const { title, content } = req.body;
-  const novel = await prisma.novel.create({ data: { title, content } });
-  res.status(201).json(novel);
+// 创建小说（支持 JSON 和文件上传）
+app.post("/api/novels", upload.single("file"), async (req, res) => {
+  try {
+    let title = "";
+    let content = "";
+
+    if (req.file) {
+      // 文件上传模式
+      const fs = await import("fs");
+      content = fs.readFileSync(req.file.path, "utf-8");
+      title = req.body.title || path.basename(req.file.originalname, path.extname(req.file.originalname));
+    } else if (req.body.content) {
+      // JSON body 模式
+      content = req.body.content;
+      title = req.body.title || "未命名小说";
+    } else {
+      return res.status(400).json({ error: "请提供文件或文本内容" });
+    }
+
+    // 文本清洗
+    const cleaned = cleanText(content);
+    const stats = analyzeText(cleaned);
+
+    const novel = await prisma.novel.create({
+      data: {
+        title,
+        content: cleaned,
+      },
+    });
+
+    res.status(201).json({
+      ...novel,
+      stats: {
+        totalChars: stats.totalChars,
+        totalLines: stats.totalLines,
+        estimatedChapters: stats.estimatedChapters,
+        chunksCount: stats.chunks.length,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 获取单个小说（含角色和场景）
 app.get("/api/novels/:id", async (req, res) => {
-  const novel = await prisma.novel.findUnique({
-    where: { id: req.params.id },
-    include: { characters: true, scenes: { include: { scripts: true } } },
-  });
-  if (!novel) return res.status(404).json({ error: "Not found" });
-  res.json(novel);
+  try {
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { characters: true, scenes: { include: { scripts: true } } },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+    res.json(novel);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 更新小说
+app.put("/api/novels/:id", async (req, res) => {
+  try {
+    const { title, content } = req.body;
+    const novel = await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { ...(title && { title }), ...(content && { content }) },
+    });
+    res.json(novel);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 删除小说
 app.delete("/api/novels/:id", async (req, res) => {
-  await prisma.novel.delete({ where: { id: req.params.id } });
-  res.json({ ok: true });
+  try {
+    await prisma.novel.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 文本预处理 ---
+
+// 获取小说文本分析
+app.get("/api/novels/:id/stats", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({ where: { id: req.params.id } });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    const stats = analyzeText(novel.content);
+    const chapters = splitChapters(novel.content);
+
+    res.json({
+      ...stats,
+      chapters: chapters.map((c) => ({
+        index: c.index,
+        title: c.title,
+        charCount: c.content.length,
+        lineCount: c.content.split("\n").length,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 预处理小说（重新清洗+分段）
+app.post("/api/novels/:id/process", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({ where: { id: req.params.id } });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    const cleaned = cleanText(novel.content);
+    const chapters = splitChapters(cleaned);
+    const chunks = chunkByChars(cleaned);
+
+    // 更新清洗后的内容
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { content: cleaned },
+    });
+
+    res.json({
+      cleaned: true,
+      stats: {
+        totalChars: cleaned.length,
+        totalLines: cleaned.split("\n").length,
+        chapters: chapters.length,
+        chunks: chunks.length,
+      },
+      chapterTitles: chapters.map((c) => c.title),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
