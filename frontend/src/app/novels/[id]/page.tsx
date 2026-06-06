@@ -10,6 +10,9 @@ import CharacterCard from "@/components/CharacterCard";
 import SceneList from "@/components/SceneList";
 import ScriptViewer from "@/components/ScriptViewer";
 import PipelineProgress from "@/components/PipelineProgress";
+import AnnotationPanel from "@/components/AnnotationPanel";
+import ImpactDialog from "@/components/ImpactDialog";
+import { buildDeps, analyzeImpact, runIncrementalPipeline } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -23,7 +26,7 @@ export default function NovelDetailPage() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
-  const [activeTab, setActiveTab] = useState<"info" | "plot" | "characters" | "scenes">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "plot" | "characters" | "scenes" | "annotations">("info");
   const [selectedScene, setSelectedScene] = useState<SceneWithScripts | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
@@ -36,6 +39,14 @@ export default function NovelDetailPage() {
   const [pipeDetail, setPipeDetail] = useState("");
   const [pipeStats, setPipeStats] = useState<any>(null);
   const [pipeError, setPipeError] = useState("");
+  // 增量重算状态
+  const [showImpact, setShowImpact] = useState(false);
+  const [impactData, setImpactData] = useState<{
+    affectedSceneNums: number[];
+    excludedLockedNums: number[];
+  } | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [buildingDeps, setBuildingDeps] = useState(false);
 
   const fetchNovel = useCallback(async () => {
     setFetchError("");
@@ -171,6 +182,56 @@ export default function NovelDetailPage() {
     window.open(`${API_BASE}/api/novels/${id}/export`, "_blank");
   };
 
+  const handleBuildDeps = async () => {
+    setBuildingDeps(true);
+    try {
+      const result = await buildDeps(id);
+      alert(`✅ 依赖图谱构建完成！共 ${result.sceneCount} 个场景，${result.edges.length} 条依赖关系。`);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setBuildingDeps(false);
+    }
+  };
+
+  const handleIncrementalCheck = async () => {
+    if (scenes.length === 0) {
+      alert("请先生成场景剧本");
+      return;
+    }
+    // 默认检查所有非锁定场景变更的影响
+    setImpactLoading(true);
+    try {
+      // 先构建/更新依赖图
+      await buildDeps(id);
+      // 以所有非锁定场景为变更起点进行 BFS
+      const unlockedNums = scenes.filter((s) => !s.isLocked).map((s) => s.sceneNum);
+      const impact = await analyzeImpact(id, unlockedNums.slice(0, 3)); // 取前3个作为变更源
+      setImpactData(impact);
+      setShowImpact(true);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setImpactLoading(false);
+    }
+  };
+
+  const handleIncrementalConfirm = async () => {
+    if (!impactData || impactData.affectedSceneNums.length === 0) return;
+    setShowImpact(false);
+    setPipelining(true);
+    setPipeMessage("🔄 增量重算中...");
+    try {
+      await runIncrementalPipeline(id, impactData.affectedSceneNums);
+      await fetchNovel();
+      setPipelineStep(`✅ 增量重算完成！更新了 ${impactData.affectedSceneNums.length} 个场景`);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setPipelining(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -303,6 +364,26 @@ export default function NovelDetailPage() {
           </button>
         )}
 
+        {/* 依赖图谱 */}
+        {scenes.length >= 2 && (
+          <>
+            <button
+              onClick={handleBuildDeps}
+              disabled={buildingDeps}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              {buildingDeps ? "⏳ 分析中..." : "🔗 构建依赖图"}
+            </button>
+            <button
+              onClick={handleIncrementalCheck}
+              disabled={impactLoading}
+              className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-5 py-3 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100 disabled:opacity-50"
+            >
+              {impactLoading ? "⏳ 分析中..." : "⚡ 增量重算"}
+            </button>
+          </>
+        )}
+
         {/* 导出 YAML */}
         {scenes.length > 0 && (
           <button
@@ -346,6 +427,7 @@ export default function NovelDetailPage() {
           { key: "plot", label: "📊 剧情分析" },
           { key: "characters", label: `👥 角色 (${characters.length})` },
           { key: "scenes", label: `🎬 场景 (${scenes.length})` },
+          { key: "annotations", label: "💬 注记" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -399,6 +481,7 @@ export default function NovelDetailPage() {
               scenes={scenes}
               onSelectScene={setSelectedScene}
               selectedSceneId={selectedScene?.id}
+              onRefresh={fetchNovel}
             />
           </div>
           <div className="lg:col-span-3">
@@ -413,6 +496,26 @@ export default function NovelDetailPage() {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === "annotations" && (
+        <AnnotationPanel
+          novelId={id}
+          targetType="scene"
+          targetId={selectedScene?.id || ""}
+          targetLabel={selectedScene ? `Scene ${selectedScene.sceneNum} - ${selectedScene.location}` : undefined}
+        />
+      )}
+
+      {/* 增量重算影响确认弹窗 */}
+      {showImpact && impactData && (
+        <ImpactDialog
+          affectedSceneNums={impactData.affectedSceneNums}
+          excludedLockedNums={impactData.excludedLockedNums}
+          onConfirm={handleIncrementalConfirm}
+          onCancel={() => setShowImpact(false)}
+          loading={pipelining}
+        />
       )}
     </main>
   );

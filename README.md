@@ -425,17 +425,133 @@ npx prisma migrate dev    # 重新创建
 
 ---
 
+## ✋ 人工干预模块（编剧干预层）
+
+系统从"替代编剧"转变为 **"增强型智能副驾"**，在保持自动化高效的同时，
+赋予编剧对 AI 输出的最终裁决权。
+
+### 🔒 场景锁定
+
+编剧可以锁定满意的场景，后续 AI 重跑时自动跳过，保护已确认内容：
+
+```bash
+# 锁定场景
+curl -X PUT http://localhost:4000/api/scenes/:sceneId/lock
+# → { "ok": true, "isLocked": true, "lockedBy": "local-editor" }
+
+# 解锁场景
+curl -X PUT http://localhost:4000/api/scenes/:sceneId/unlock
+```
+
+| 特性 | 说明 |
+|:---|:---|
+| 锁状态显示 | 锁定场景在列表中显示 🔒 + 琥珀色背景 |
+| Pipeline 保护 | `deleteMany` 改为 `deleteMany({ isLocked: false })` |
+| 一键解锁 | 点击场景旁的 🔒/🔓 图标即可切换 |
+
+### 💬 创作注记
+
+支持对场景/角色添加结构化注记，实现创作思路的可视化沉淀：
+
+| 注记类型 | 颜色 | 用途 |
+|:---|:---|:---|
+| 📋 待办 (todo) | 橙色 | 需要后续处理的事项 |
+| ❓ 疑问 (question) | 蓝色 | 不确定的创作决策 |
+| 💡 灵感 (inspiration) | 黄色 | 临时创意火花 |
+| ⚠️ 警示 (warning) | 红色 | 需要关注的问题 |
+| 💬 笔记 (note) | 灰色 | 一般性备注 |
+
+```bash
+# 创建注记
+curl -X POST http://localhost:4000/api/annotations \
+  -H "Content-Type: application/json" \
+  -d '{"novelId":"...","targetType":"scene","targetId":"...","content":"需加强主角犹豫心理","type":"todo"}'
+
+# 查看小说所有注记
+curl http://localhost:4000/api/novels/:id/annotations
+```
+
+### 📜 版本快照与回滚
+
+每次 AI 生成或手动修改都会创建新版本（不覆盖），
+支持版本历史浏览、Diff 对比和无损回滚：
+
+```
+版本链: v1(system) → v2(system) → v3(user 回滚自 v1)
+```
+
+```bash
+# 查看版本历史
+curl http://localhost:4000/api/scenes/:id/versions
+
+# Diff 对比
+curl "http://localhost:4000/api/scenes/:id/diff?v1=ID1&v2=ID2"
+# → { diffs: [{ type: "added"|"removed"|"unchanged", lines: [...], lineNum: N }] }
+
+# 回滚到历史版本（生成新版本，保留审计链）
+curl -X POST http://localhost:4000/api/scenes/:id/rollback \
+  -H "Content-Type: application/json" \
+  -d '{"targetVersionId":"..."}'
+```
+
+### 🔗 依赖图谱与增量重算
+
+系统分析场景间的因果/角色/时序依赖关系，
+当编剧修改角色或某场景后，自动计算最小影响范围，
+仅重算受影响场景（锁定场景自动排除）。
+
+```bash
+# 构建依赖图谱
+curl -X POST http://localhost:4000/api/novels/:id/build-deps
+
+# 影响域分析（BFS）
+curl -X POST http://localhost:4000/api/novels/:id/impact-analysis \
+  -H "Content-Type: application/json" \
+  -d '{"changedSceneNums": [2, 3]}'
+# → { affectedSceneNums: [2,3,5,7], excludedLockedNums: [5], totalScenesToRegenerate: 3 }
+
+# 增量重算（仅生成指定场景）
+curl -X POST http://localhost:4000/api/novels/:id/incremental-pipeline \
+  -H "Content-Type: application/json" \
+  -d '{"sceneNums": [2,3,7]}'
+```
+
+### 典型工作流
+
+```
+1. 全量生成剧本初稿（一键流水线）
+2. 审阅场景 → 满意的锁定 🔒 / 不满意的添加注记 💬
+3. 修改角色设定 → 触发增量重算 ⚡
+4. 系统弹出影响确认 → 排除锁定场景 → 仅重算受影响场景
+5. 不满意新版？→ 版本历史 📜 → Diff 对比 → 🔄 回滚到旧版
+6. 确认所有场景 → 📥 导出 YAML
+```
+
+### 数据库扩展
+
+| 新增表 | 说明 |
+|:---|:---|
+| `annotations` | 多态注记（Scene / Character / Line） |
+| `dependency_edges` | 场景间因果/时序/角色依赖关系 |
+
+| 扩展表 | 新增字段 |
+|:---|:---|
+| `scenes` | `is_locked`, `locked_by`, `current_version_id` |
+| `scripts` | `created_by`, `parent_version_id` |
+
+---
+
 ## 🔮 路线图
 
 - [x] 项目脚手架搭建（前端 + 后端 + 数据库）
 - [x] Mimo AI 客户端集成
 - [x] 4 Agent 服务接口（剧情解构 / 角色图谱 / 场记统筹 / 剧本主笔）
+- [x] SSE 实时进度可视化
+- [x] 人工干预模块（场景锁定 / 创作注记 / 版本管理 / Diff 对比 / 增量重算）
 - [ ] 小说文本分块上传与解析
 - [ ] YAML Schema 强校验输出
 - [ ] 前端双栏工作台（原文 ↔ YAML 实时映射）
 - [ ] 角色关系网络图可视化
-- [ ] 流式 SSE 剧本生成
-- [ ] YAML 导出与版本对比
 - [ ] Docker 一键部署
 
 ## 📄 License

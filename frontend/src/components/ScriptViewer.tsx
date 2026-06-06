@@ -1,12 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Scene, Script } from "@/lib/api";
+import VersionHistory from "./VersionHistory";
 
 interface ScriptViewerProps {
   scene: Scene & { scripts?: Script[] };
+  onRollback?: () => void;
 }
 
-export default function ScriptViewer({ scene }: ScriptViewerProps) {
+export default function ScriptViewer({ scene, onRollback }: ScriptViewerProps) {
+  const [showVersions, setShowVersions] = useState(false);
   const script = scene.scripts?.[0];
 
   if (!script) {
@@ -15,6 +19,20 @@ export default function ScriptViewer({ scene }: ScriptViewerProps) {
         <p className="text-4xl">📝</p>
         <p className="mt-3 text-gray-500">该场景尚未生成剧本</p>
       </div>
+    );
+  }
+
+  if (showVersions) {
+    return (
+      <VersionHistory
+        sceneId={scene.id}
+        sceneLabel={`Scene ${scene.sceneNum} — ${scene.location}`}
+        onClose={() => setShowVersions(false)}
+        onRollback={() => {
+          setShowVersions(false);
+          onRollback?.();
+        }}
+      />
     );
   }
 
@@ -29,12 +47,21 @@ export default function ScriptViewer({ scene }: ScriptViewerProps) {
             </h3>
             <p className="text-sm text-gray-400">
               第 {script.version} 版 ·{" "}
+              {script.createdBy === "user" ? "👤 手动编辑" : "🤖 AI 生成"} ·{" "}
               {new Date(script.createdAt).toLocaleDateString("zh-CN")}
             </p>
           </div>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-            ✅ 已生成
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowVersions(true)}
+              className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-indigo-100 hover:text-indigo-600 transition"
+            >
+              📜 版本历史
+            </button>
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+              ✅ 已生成
+            </span>
+          </div>
         </div>
       </div>
 
@@ -50,6 +77,7 @@ export default function ScriptViewer({ scene }: ScriptViewerProps) {
         <div className="flex gap-4 text-xs text-gray-400">
           <span>📍 {scene.location}</span>
           <span>⏰ {scene.timeOfDay}</span>
+          {scene.isLocked && <span className="text-amber-500">🔒 已锁定</span>}
         </div>
       </div>
     </div>

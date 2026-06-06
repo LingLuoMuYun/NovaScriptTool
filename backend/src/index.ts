@@ -219,11 +219,26 @@ app.post("/api/novels/:id/generate-scripts", async (req, res) => {
     console.log(`🎬 开始生成场景剧本: ${novel.title}`);
     const result = await runScriptGenerationPipeline(novel.content, characters);
 
-    // 删除旧场景
-    await prisma.scene.deleteMany({ where: { novelId: req.params.id } });
+    // 仅删除未锁定场景（保护编剧已确认内容）
+    const lockedScenes = await prisma.scene.findMany({
+      where: { novelId: req.params.id, isLocked: true },
+      select: { sceneNum: true },
+    });
+    const lockedNums = lockedScenes.map((s) => s.sceneNum);
 
-    // 批量创建场景和剧本
+    await prisma.scene.deleteMany({
+      where: { novelId: req.params.id, isLocked: false },
+    });
+
+    // 批量创建场景和剧本（跳过锁定场景号）
+    let skippedLocked = 0;
     for (const scene of result.scenes) {
+      if (lockedNums.includes(scene.sceneNum)) {
+        skippedLocked++;
+        console.log(`  🔒 场景 ${scene.sceneNum} 已锁定，跳过`);
+        continue;
+      }
+
       const created = await prisma.scene.create({
         data: {
           novelId: req.params.id,
@@ -236,11 +251,17 @@ app.post("/api/novels/:id/generate-scripts", async (req, res) => {
       // 找到对应剧本
       const script = result.scripts.find((s) => s.sceneNum === scene.sceneNum);
       if (script) {
-        await prisma.script.create({
+        const newScript = await prisma.script.create({
           data: {
             sceneId: created.id,
             yamlContent: script.scriptYaml,
+            createdBy: "system",
           },
+        });
+        // 设置当前版本
+        await prisma.scene.update({
+          where: { id: created.id },
+          data: { currentVersionId: newScript.id },
         });
       }
     }
@@ -251,12 +272,13 @@ app.post("/api/novels/:id/generate-scripts", async (req, res) => {
       data: { status: "completed" },
     });
 
-    console.log(`✅ 场景剧本生成完成: ${novel.title} (${result.scenes.length} 个场景)`);
+    console.log(`✅ 场景剧本生成完成: ${novel.title} (${result.scenes.length} 个场景, 跳过 ${skippedLocked} 个锁定)`);
 
     res.json({
       scenes: result.scenes,
       scripts: result.scripts,
       sceneCount: result.scenes.length,
+      lockedSkipped: skippedLocked,
     });
   } catch (err: any) {
     console.error("生成失败:", err.message);
@@ -302,7 +324,7 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
       });
     }
 
-    // 2. 生成场景剧本
+    // 2. 生成场景剧本（锁保护）
     console.log("🎬 阶段 2/2: 场景规划 + 剧本生成");
     const scriptResult = await runScriptGenerationPipeline(
       novel.content,
@@ -313,8 +335,24 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
       }))
     );
 
-    await prisma.scene.deleteMany({ where: { novelId: req.params.id } });
+    // 仅删除未锁定场景
+    const lockedScenes = await prisma.scene.findMany({
+      where: { novelId: req.params.id, isLocked: true },
+      select: { sceneNum: true },
+    });
+    const lockedNums = lockedScenes.map((s) => s.sceneNum);
+
+    await prisma.scene.deleteMany({
+      where: { novelId: req.params.id, isLocked: false },
+    });
+
+    let skippedLocked = 0;
     for (const scene of scriptResult.scenes) {
+      if (lockedNums.includes(scene.sceneNum)) {
+        skippedLocked++;
+        console.log(`  🔒 场景 ${scene.sceneNum} 已锁定，跳过`);
+        continue;
+      }
       const created = await prisma.scene.create({
         data: {
           novelId: req.params.id,
@@ -325,15 +363,19 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
       });
       const script = scriptResult.scripts.find((s) => s.sceneNum === scene.sceneNum);
       if (script) {
-        await prisma.script.create({
-          data: { sceneId: created.id, yamlContent: script.scriptYaml },
+        const newScript = await prisma.script.create({
+          data: { sceneId: created.id, yamlContent: script.scriptYaml, createdBy: "system" },
+        });
+        await prisma.scene.update({
+          where: { id: created.id },
+          data: { currentVersionId: newScript.id },
         });
       }
     }
 
     await prisma.novel.update({ where: { id: req.params.id }, data: { status: "completed" } });
 
-    console.log(`✅ 一键流水线完成: ${novel.title}`);
+    console.log(`✅ 一键流水线完成: ${novel.title} (跳过 ${skippedLocked} 个锁定)`);
     res.json({
       plot: analysisResult.plot,
       characters: analysisResult.characters,
@@ -342,6 +384,7 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
       stats: {
         characters: analysisResult.characters.length,
         scenes: scriptResult.scenes.length,
+        lockedSkipped: skippedLocked,
       },
     });
   } catch (err: any) {
@@ -666,10 +709,27 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
     );
     if (aborted) return;
 
-    // 3. 保存到数据库
+    // 3. 保存到数据库（锁保护）
     onProgress({ stage: "save", progress: 96, message: "💾 正在保存到数据库..." });
-    await prisma.scene.deleteMany({ where: { novelId: req.params.id } });
+
+    const lockedScenesSSE = await prisma.scene.findMany({
+      where: { novelId: req.params.id, isLocked: true },
+      select: { sceneNum: true },
+    });
+    const lockedNumsSSE = lockedScenesSSE.map((s) => s.sceneNum);
+
+    // 仅删除未锁定场景
+    await prisma.scene.deleteMany({
+      where: { novelId: req.params.id, isLocked: false },
+    });
+
+    let skippedLockedSSE = 0;
     for (const scene of scriptResult.scenes) {
+      if (lockedNumsSSE.includes(scene.sceneNum)) {
+        skippedLockedSSE++;
+        console.log(`  🔒 场景 ${scene.sceneNum} 已锁定，跳过`);
+        continue;
+      }
       const created = await prisma.scene.create({
         data: {
           novelId: req.params.id,
@@ -680,8 +740,12 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
       });
       const script = scriptResult.scripts.find((s) => s.sceneNum === scene.sceneNum);
       if (script) {
-        await prisma.script.create({
-          data: { sceneId: created.id, yamlContent: script.scriptYaml },
+        const newScript = await prisma.script.create({
+          data: { sceneId: created.id, yamlContent: script.scriptYaml, createdBy: "system" },
+        });
+        await prisma.scene.update({
+          where: { id: created.id },
+          data: { currentVersionId: newScript.id },
         });
       }
     }
@@ -712,6 +776,286 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
       data: { status: "draft" },
     }).catch(() => {});
     res.end();
+  }
+});
+
+// --- 🆕 依赖图谱 + 增量重算 ---
+
+app.post("/api/novels/:id/build-deps", async (req, res) => {
+  try {
+    const { buildDependencyGraph } = await import("./services/dependency.service");
+    const result = await buildDependencyGraph(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/novels/:id/impact-analysis", async (req, res) => {
+  try {
+    const { changedSceneNums } = req.body;
+    if (!changedSceneNums || !Array.isArray(changedSceneNums)) {
+      return res.status(400).json({ error: "请提供 changedSceneNums 数组" });
+    }
+    const { analyzeImpact } = await import("./services/dependency.service");
+    const result = await analyzeImpact(req.params.id, changedSceneNums);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
+  try {
+    const { sceneNums } = req.body;
+    if (!sceneNums || !Array.isArray(sceneNums) || sceneNums.length === 0) {
+      return res.status(400).json({ error: "请提供需要重新生成的场景编号数组" });
+    }
+
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { characters: true },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    const { writeScript } = await import("./services/ai.service");
+
+    // 获取指定场景
+    const targetScenes = await prisma.scene.findMany({
+      where: {
+        novelId: req.params.id,
+        sceneNum: { in: sceneNums },
+        isLocked: false,
+      },
+      orderBy: { sceneNum: "asc" },
+    });
+
+    const characters = novel.characters.map((c) => ({
+      name: c.name,
+      roleType: c.roleType,
+      traits: JSON.parse(c.traits || "{}"),
+    }));
+
+    console.log(`🔄 增量重算: ${targetScenes.length} 个场景 (${sceneNums.join(", ")})`);
+
+    const results: any[] = [];
+    for (const scene of targetScenes) {
+      const sceneChars = characters.filter((c) =>
+        c.name.includes(scene.location) || true // 简化：给所有角色
+      ).slice(0, 3);
+
+      console.log(`  ✍️ 增量生成场景 ${scene.sceneNum}...`);
+      const scriptResponse = await writeScript(
+        { sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
+        sceneChars.length > 0 ? sceneChars : characters.slice(0, 2)
+      );
+
+      const { parseAIJson } = await import("./services/ai.service");
+      const scriptData = parseAIJson(scriptResponse.content);
+
+      // 获取最新版本号
+      const latest = await prisma.script.findFirst({
+        where: { sceneId: scene.id },
+        orderBy: { version: "desc" },
+      });
+      const nextVersion = (latest?.version || 0) + 1;
+
+      const newScript = await prisma.script.create({
+        data: {
+          sceneId: scene.id,
+          yamlContent: scriptData.script || JSON.stringify(scriptData),
+          version: nextVersion,
+          createdBy: "system",
+          parentVersionId: latest?.id || null,
+        },
+      });
+
+      await prisma.scene.update({
+        where: { id: scene.id },
+        data: { currentVersionId: newScript.id },
+      });
+
+      results.push({ sceneNum: scene.sceneNum, version: nextVersion });
+      console.log(`  ✅ 场景 ${scene.sceneNum} → v${nextVersion}`);
+    }
+
+    res.json({
+      regenerated: results.length,
+      scenes: results,
+      skippedLocked: sceneNums.length - targetScenes.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 🆕 版本管理 + Diff + 回滚 ---
+
+app.get("/api/scenes/:id/versions", async (req, res) => {
+  try {
+    const versions = await prisma.script.findMany({
+      where: { sceneId: req.params.id },
+      orderBy: { version: "desc" },
+    });
+    res.json(versions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/scenes/:id/versions/:versionId", async (req, res) => {
+  try {
+    const script = await prisma.script.findUnique({ where: { id: req.params.versionId } });
+    if (!script) return res.status(404).json({ error: "版本不存在" });
+    res.json(script);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/scenes/:id/diff", async (req, res) => {
+  try {
+    const { v1, v2 } = req.query;
+    if (!v1 || !v2) return res.status(400).json({ error: "请指定 v1 和 v2 版本 ID" });
+
+    const [script1, script2] = await Promise.all([
+      prisma.script.findUnique({ where: { id: String(v1) } }),
+      prisma.script.findUnique({ where: { id: String(v2) } }),
+    ]);
+
+    if (!script1 || !script2) return res.status(404).json({ error: "版本不存在" });
+
+    const { diffYaml } = await import("./services/diff.service");
+    const diffs = diffYaml(script1.yamlContent, script2.yamlContent);
+
+    res.json({
+      v1: { id: script1.id, version: script1.version, createdAt: script1.createdAt },
+      v2: { id: script2.id, version: script2.version, createdAt: script2.createdAt },
+      diffs,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/scenes/:id/rollback", async (req, res) => {
+  try {
+    const { targetVersionId } = req.body;
+    if (!targetVersionId) return res.status(400).json({ error: "请指定目标版本 ID" });
+
+    const targetVersion = await prisma.script.findUnique({ where: { id: targetVersionId } });
+    if (!targetVersion) return res.status(404).json({ error: "目标版本不存在" });
+
+    // 获取当前最大版本号
+    const latest = await prisma.script.findFirst({
+      where: { sceneId: req.params.id },
+      orderBy: { version: "desc" },
+    });
+    const nextVersion = (latest?.version || 0) + 1;
+
+    // 复制目标版本内容作为新版本插入（保留审计链）
+    const newVersion = await prisma.script.create({
+      data: {
+        sceneId: req.params.id,
+        yamlContent: targetVersion.yamlContent,
+        version: nextVersion,
+        createdBy: "user",
+        parentVersionId: targetVersion.id,
+      },
+    });
+
+    // 更新场景当前活跃版本
+    await prisma.scene.update({
+      where: { id: req.params.id },
+      data: { currentVersionId: newVersion.id },
+    });
+
+    console.log(`🔄 场景 ${req.params.id} 回滚至 v${targetVersion.version} → 新版本 v${nextVersion}`);
+    res.json({
+      ok: true,
+      rolledBackToVersion: targetVersion.version,
+      newVersion,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 🆕 场景锁定/解锁 ---
+
+app.put("/api/scenes/:id/lock", async (req, res) => {
+  try {
+    const scene = await prisma.scene.update({
+      where: { id: req.params.id },
+      data: { isLocked: true, lockedBy: "local-editor" },
+    });
+    res.json({ ok: true, isLocked: true, lockedBy: scene.lockedBy });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/scenes/:id/unlock", async (req, res) => {
+  try {
+    const scene = await prisma.scene.update({
+      where: { id: req.params.id },
+      data: { isLocked: false, lockedBy: null },
+    });
+    res.json({ ok: true, isLocked: false });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 🆕 注记 CRUD ---
+
+app.get("/api/novels/:id/annotations", async (req, res) => {
+  try {
+    const annotations = await prisma.annotation.findMany({
+      where: { novelId: req.params.id },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(annotations);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/annotations", async (req, res) => {
+  try {
+    const { novelId, targetType, targetId, content, type } = req.body;
+    const annotation = await prisma.annotation.create({
+      data: { novelId, targetType, targetId, content, type: type || "note" },
+    });
+    res.status(201).json(annotation);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/annotations/:id", async (req, res) => {
+  try {
+    const { content, type, resolved } = req.body;
+    const annotation = await prisma.annotation.update({
+      where: { id: req.params.id },
+      data: {
+        ...(content !== undefined && { content }),
+        ...(type !== undefined && { type }),
+        ...(resolved !== undefined && { resolved }),
+      },
+    });
+    res.json(annotation);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/annotations/:id", async (req, res) => {
+  try {
+    await prisma.annotation.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

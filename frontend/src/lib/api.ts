@@ -64,6 +64,9 @@ export interface Scene {
   sceneNum: number;
   location: string;
   timeOfDay: string;
+  isLocked?: boolean;
+  lockedBy?: string | null;
+  currentVersionId?: string | null;
   scripts?: Script[];
 }
 
@@ -72,7 +75,27 @@ export interface Script {
   sceneId: string;
   yamlContent: string;
   version: number;
+  createdBy?: string;
+  parentVersionId?: string | null;
   createdAt: string;
+}
+
+export interface Annotation {
+  id: string;
+  novelId: string;
+  targetType: string;
+  targetId: string;
+  content: string;
+  type: string;
+  resolved: boolean;
+  createdAt: string;
+}
+
+export interface DiffLine {
+  type: "added" | "removed" | "unchanged";
+  lines: string[];
+  oldLineNum?: number;
+  newLineNum?: number;
 }
 
 export function getNovels(): Promise<Novel[]> {
@@ -152,5 +175,97 @@ export function analyzeCharacters(content: string): Promise<ChatResult> {
   return request("/api/ai/analyze-characters", {
     method: "POST",
     body: JSON.stringify({ content }),
+  });
+}
+
+// ─── 场景锁定/解锁 ──────────────────────────────────
+
+export function lockScene(sceneId: string): Promise<{ ok: boolean; isLocked: boolean }> {
+  return request(`/api/scenes/${sceneId}/lock`, { method: "PUT" });
+}
+
+export function unlockScene(sceneId: string): Promise<{ ok: boolean; isLocked: boolean }> {
+  return request(`/api/scenes/${sceneId}/unlock`, { method: "PUT" });
+}
+
+// ─── 注记 CRUD ──────────────────────────────────────
+
+export function getAnnotations(novelId: string): Promise<Annotation[]> {
+  return request(`/api/novels/${novelId}/annotations`);
+}
+
+export function createAnnotation(data: {
+  novelId: string;
+  targetType: string;
+  targetId: string;
+  content: string;
+  type?: string;
+}): Promise<Annotation> {
+  return request("/api/annotations", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateAnnotation(
+  id: string,
+  data: { content?: string; type?: string; resolved?: boolean }
+): Promise<Annotation> {
+  return request(`/api/annotations/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteAnnotation(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/annotations/${id}`, { method: "DELETE" });
+}
+
+// ─── 版本管理 ──────────────────────────────────────
+
+export function getSceneVersions(sceneId: string): Promise<Script[]> {
+  return request(`/api/scenes/${sceneId}/versions`);
+}
+
+export function getSceneVersion(sceneId: string, versionId: string): Promise<Script> {
+  return request(`/api/scenes/${sceneId}/versions/${versionId}`);
+}
+
+export function diffSceneVersions(
+  sceneId: string,
+  v1: string,
+  v2: string
+): Promise<{ diffs: DiffLine[] }> {
+  return request(`/api/scenes/${sceneId}/diff?v1=${v1}&v2=${v2}`);
+}
+
+export function rollbackScene(sceneId: string, targetVersionId: string): Promise<Script> {
+  return request(`/api/scenes/${sceneId}/rollback`, {
+    method: "POST",
+    body: JSON.stringify({ targetVersionId }),
+  });
+}
+
+// ─── 依赖图谱 + 增量重算 ─────────────────────────
+
+export function buildDeps(novelId: string): Promise<{ edges: any[]; sceneCount: number }> {
+  return request(`/api/novels/${novelId}/build-deps`, { method: "POST" });
+}
+
+export function analyzeImpact(
+  novelId: string,
+  changedSceneNums: number[]
+): Promise<{
+  affectedSceneNums: number[];
+  excludedLockedNums: number[];
+  totalScenesToRegenerate: number;
+}> {
+  return request(`/api/novels/${novelId}/impact-analysis`, {
+    method: "POST",
+    body: JSON.stringify({ changedSceneNums }),
+  });
+}
+
+export function runIncrementalPipeline(
+  novelId: string,
+  sceneNums: number[]
+): Promise<{ regenerated: number; scenes: any[]; skippedLocked: number }> {
+  return request(`/api/novels/${novelId}/incremental-pipeline`, {
+    method: "POST",
+    body: JSON.stringify({ sceneNums }),
   });
 }
