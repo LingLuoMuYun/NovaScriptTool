@@ -71,6 +71,7 @@
 |:---|:---|:---|
 | **前端** | Next.js 14 · React 18 · TypeScript · TailwindCSS | 双栏工作台（原文 ↔ 剧本 YAML 实时映射） |
 | **后端** | Node.js · Express · TypeScript | RESTful API |
+| **后端依赖** | OpenAI SDK · multer · dotenv · tsx | AI 客户端 / 文件上传 / 环境变量 / 开发热重载 |
 | **数据库** | SQLite（开发） / PostgreSQL 16（生产） | Prisma ORM 统一访问层 |
 | **AI 引擎** | Mimo v2.5（小米 AI） | OpenAI 兼容 API，支持思维链推理 |
 | **部署** | Docker · Nginx | 容器化，反向代理 + HTTPS |

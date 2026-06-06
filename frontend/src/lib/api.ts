@@ -33,6 +33,7 @@ export interface Novel {
   title: string;
   content: string;
   status: string;
+  analysis?: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: { characters: number; scenes: number };

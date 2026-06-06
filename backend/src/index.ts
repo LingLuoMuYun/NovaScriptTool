@@ -124,6 +124,84 @@ app.post("/api/ai/write-script", async (req, res) => {
   }
 });
 
+// --- Agent 编排：分析小说 ---
+
+app.post("/api/novels/:id/analyze", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({ where: { id: req.params.id } });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    if (!novel.content || novel.content.trim().length < 50) {
+      return res.status(400).json({ error: "小说内容过短，至少需要50字" });
+    }
+
+    // 更新状态为分析中
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "analyzing" },
+    });
+
+    const { runAnalysisPipeline } = await import("./services/ai.service");
+
+    console.log(`📖 开始分析小说: ${novel.title}`);
+    const result = await runAnalysisPipeline(novel.content);
+
+    // 存储分析结果到 Novel
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: {
+        status: "analyzed",
+        analysis: JSON.stringify(result.plot),
+      },
+    });
+
+    // 批量创建角色
+    if (result.characters.length > 0) {
+      // 先删除旧角色
+      await prisma.character.deleteMany({ where: { novelId: req.params.id } });
+
+      await prisma.character.createMany({
+        data: result.characters.map((c) => ({
+          novelId: req.params.id,
+          name: c.name,
+          aliases: JSON.stringify(c.aliases || []),
+          roleType: c.roleType || "配角",
+          traits: JSON.stringify(c.traits || {}),
+        })),
+      });
+    }
+
+    console.log(`✅ 分析完成: ${novel.title} (${result.characters.length} 个角色)`);
+
+    res.json({
+      plot: result.plot,
+      characters: result.characters,
+      characterCount: result.characters.length,
+    });
+  } catch (err: any) {
+    // 恢复状态
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "draft" },
+    }).catch(() => {});
+    console.error("分析失败:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 获取小说的角色列表
+app.get("/api/novels/:id/characters", async (req, res) => {
+  try {
+    const characters = await prisma.character.findMany({
+      where: { novelId: req.params.id },
+      orderBy: { name: "asc" },
+    });
+    res.json(characters);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 数据库 CRUD ---
 
 // 获取所有小说

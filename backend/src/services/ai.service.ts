@@ -198,3 +198,99 @@ ${JSON.stringify(charactersInScene)}
     { responseFormat: "json_object" }
   );
 }
+
+// --- JSON 解析工具 ---
+
+/**
+ * 从 AI 响应中解析 JSON
+ * 处理常见格式：纯 JSON、markdown 代码块包裹、含 reasoning 前缀等
+ */
+export function parseAIJson(content: string): any {
+  // 尝试直接解析
+  try {
+    return JSON.parse(content);
+  } catch {}
+
+  // 尝试提取 ```json ... ``` 代码块
+  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1]);
+    } catch {}
+  }
+
+  // 尝试找到第一个 { 和最后一个 }
+  const firstBrace = content.indexOf("{");
+  const lastBrace = content.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(content.slice(firstBrace, lastBrace + 1));
+    } catch {}
+  }
+
+  // 尝试找到第一个 [ 和最后一个 ]
+  const firstBracket = content.indexOf("[");
+  const lastBracket = content.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+    try {
+      return JSON.parse(content.slice(firstBracket, lastBracket + 1));
+    } catch {}
+  }
+
+  throw new Error(`无法解析 AI 响应为 JSON，原始内容前200字: ${content.substring(0, 200)}`);
+}
+
+// --- 多 Agent 编排 ---
+
+export interface AnalysisResult {
+  plot: {
+    outline: {
+      opening: string;
+      development: string;
+      climax: string;
+      ending: string;
+    };
+    timeline: { order: number; event: string; chapter?: string }[];
+    conflicts: { type: string; description: string; parties: string[] }[];
+  };
+  characters: {
+    name: string;
+    aliases: string[];
+    roleType: string;
+    traits: {
+      identity: string;
+      personality: string[];
+      goal: string;
+      motivation: string;
+      relationships: { with: string; relation: string }[];
+    };
+  }[];
+}
+
+/**
+ * 执行 Agent 1 + Agent 2 分析流水线
+ * Agent 1: 剧情解构 → Agent 2: 角色图谱
+ */
+export async function runAnalysisPipeline(novelContent: string): Promise<AnalysisResult> {
+  // 文本预处理：如果太长，取前 15000 字做分析
+  const truncatedContent = novelContent.length > 15000
+    ? novelContent.substring(0, 15000) + "\n\n[文本过长，已截取前15000字分析...]"
+    : novelContent;
+
+  // Agent 1: 剧情解构
+  console.log("  🧠 Agent 1: 剧情解构中...");
+  const plotResponse = await analyzePlot(truncatedContent);
+  const plotData = parseAIJson(plotResponse.content);
+  console.log("  ✅ Agent 1 完成");
+
+  // Agent 2: 角色图谱
+  console.log("  🧠 Agent 2: 角色提取中...");
+  const charResponse = await analyzeCharacters(truncatedContent);
+  const charData = parseAIJson(charResponse.content);
+  console.log("  ✅ Agent 2 完成");
+
+  return {
+    plot: plotData,
+    characters: charData.characters || [],
+  };
+}
