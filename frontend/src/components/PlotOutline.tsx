@@ -8,9 +8,10 @@ interface PlotOutlineProps {
     timeline?: { order: number; event: string; chapter?: string }[];
     conflicts?: { type: string; description: string; parties: string[] }[];
   };
+  knownCharacters?: string[];
 }
 
-export default function PlotOutline({ analysis }: PlotOutlineProps) {
+export default function PlotOutline({ analysis, knownCharacters }: PlotOutlineProps) {
   const { outline, timeline, conflicts } = analysis;
 
   return (
@@ -85,7 +86,7 @@ export default function PlotOutline({ analysis }: PlotOutlineProps) {
                 <p className="text-sm text-gray-700">{c.description}</p>
               </div>
             ))}
-            <ConflictChart conflicts={conflicts} />
+            <ConflictChart conflicts={conflicts} knownCharacters={knownCharacters} />
           </div>
         </div>
       )}

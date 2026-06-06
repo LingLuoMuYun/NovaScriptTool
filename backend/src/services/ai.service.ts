@@ -106,14 +106,15 @@ export async function analyzePlot(novelContent: string) {
         content: `你是一位资深的剧本分析师。请通读以下小说内容，完成以下任务：
 1. 提取核心故事大纲（包含起因、发展、高潮、结局）
 2. 梳理全局时间线（按时间顺序列出关键事件节点）
-3. 识别主要剧情冲突与转折点
+3. 识别主要剧情冲突与转折点（冲突参与方必须是原文中有姓名的具体人物，禁止使用"命运""社会""环境"等抽象概念）
 
 请以 JSON 格式输出，结构如下：
 {
   "outline": { "opening": "...", "development": "...", "climax": "...", "ending": "..." },
   "timeline": [{ "order": 1, "event": "...", "chapter": "..." }],
-  "conflicts": [{ "type": "...", "description": "...", "parties": ["..."] }]
-}`,
+  "conflicts": [{ "type": "人物冲突", "description": "...", "parties": ["角色A", "角色B"] }]
+}
+注意: conflicts[].parties 只能包含原文中有具体姓名的人物。`,
       },
       { role: "user", content: novelContent },
     ],
@@ -388,14 +389,15 @@ async function _doAnalysis(
         content: `你是一位资深的剧本分析师。请通读以下小说内容，完成以下任务：
 1. 提取核心故事大纲（包含起因、发展、高潮、结局）
 2. 梳理全局时间线（按时间顺序列出关键事件节点）
-3. 识别主要剧情冲突与转折点
+3. 识别主要剧情冲突与转折点（冲突参与方必须是原文中有姓名的具体人物，禁止使用"命运""社会""环境"等抽象概念）
 
 请以 JSON 格式输出，结构如下：
 {
   "outline": { "opening": "...", "development": "...", "climax": "...", "ending": "..." },
   "timeline": [{ "order": 1, "event": "...", "chapter": "..." }],
-  "conflicts": [{ "type": "...", "description": "...", "parties": ["..."] }]
-}`,
+  "conflicts": [{ "type": "人物冲突", "description": "...", "parties": ["角色A", "角色B"] }]
+}
+注意: conflicts[].parties 只能包含原文中有具体姓名的人物。`,
       },
       { role: "user", content },
     ],

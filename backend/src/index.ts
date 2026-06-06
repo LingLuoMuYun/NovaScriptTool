@@ -178,6 +178,18 @@ app.post("/api/novels/:id/analyze", async (req, res) => {
       });
     }
 
+    // 后处理：过滤 conflicts 中不属于角色的抽象实体（如"命运""社会"等AI幻觉）
+    const validNames = new Set(result.characters.map((c: any) => c.name));
+    if (result.plot?.conflicts) {
+      let filtered = 0;
+      for (const c of result.plot.conflicts) {
+        const before = (c.parties || []).length;
+        c.parties = (c.parties || []).filter((p: string) => validNames.has(p));
+        filtered += before - c.parties.length;
+      }
+      if (filtered > 0) console.log(`  🧹 已过滤 ${filtered} 个非角色冲突参与方`);
+    }
+
     console.log(`✅ 分析完成: ${novel.title} (${result.characters.length} 个角色)`);
 
     res.json({

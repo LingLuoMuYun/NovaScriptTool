@@ -14,6 +14,7 @@ interface AnalysisDashboardProps {
   analysis: any;
   sceneCount: number;
   characterCount: number;
+  characterNames?: string[];
   onSceneClick?: (sceneNum: number) => void;
 }
 
@@ -22,6 +23,7 @@ export default function AnalysisDashboard({
   analysis,
   sceneCount,
   characterCount,
+  characterNames,
   onSceneClick,
 }: AnalysisDashboardProps) {
   const conflictCount = analysis?.conflicts?.length || 0;
@@ -52,7 +54,7 @@ export default function AnalysisDashboard({
       </div>
 
       {/* 剧情大纲 */}
-      {analysis && <PlotOutline analysis={analysis} />}
+      {analysis && <PlotOutline analysis={analysis} knownCharacters={characterNames} />}
 
       {/* 冲突统计已内嵌在 PlotOutline 中 */}
 

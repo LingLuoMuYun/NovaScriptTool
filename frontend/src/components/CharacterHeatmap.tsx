@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { getCharacterHeatmap, HeatmapData } from "@/lib/api";
 
 interface CharacterHeatmapProps {
@@ -29,9 +29,20 @@ export default function CharacterHeatmap({ novelId, onSceneClick }: CharacterHea
   const [data, setData] = useState<HeatmapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("全部");
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{
     charName: string; sceneNum: number; location: string; value: number;
   } | null>(null);
+
+  // 防抖 tooltip，避免快速移动时闪烁
+  const handleCellEnter = useCallback((info: typeof hoveredCell) => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setHoveredCell(info);
+  }, []);
+
+  const handleCellLeave = useCallback(() => {
+    hoverTimeoutRef.current = setTimeout(() => setHoveredCell(null), 150);
+  }, []);
 
   const fetch = useCallback(async () => {
     try {
@@ -79,14 +90,16 @@ export default function CharacterHeatmap({ novelId, onSceneClick }: CharacterHea
         </select>
       </div>
 
-      {/* Tooltip */}
-      {hoveredCell && (
-        <div className="mb-2 rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-white">
-          <span className="font-medium">{hoveredCell.charName}</span>
-          {" → "}场景 {hoveredCell.sceneNum}「{hoveredCell.location}」
-          {" · "}强度: {hoveredCell.value}
-        </div>
-      )}
+      {/* Tooltip - 防抖后稳定显示 */}
+      <div className="mb-2 h-7">
+        {hoveredCell && (
+          <span className="inline-block rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-white shadow-lg transition-opacity duration-150">
+            <span className="font-medium">{hoveredCell.charName}</span>
+            {" → "}场景 {hoveredCell.sceneNum}「{hoveredCell.location}」
+            {" · "}强度: {hoveredCell.value}
+          </span>
+        )}
+      </div>
 
       {/* 热力图网格 */}
       <div className="overflow-x-auto">
@@ -132,14 +145,14 @@ export default function CharacterHeatmap({ novelId, onSceneClick }: CharacterHea
                     title={`${char.name} × 场景${data.scenes[sceneIdx].sceneNum}: 强度 ${val}`}
                     onClick={() => onSceneClick?.(data.scenes[sceneIdx].sceneNum)}
                     onMouseEnter={() =>
-                      setHoveredCell({
+                      handleCellEnter({
                         charName: char.name,
                         sceneNum: data.scenes[sceneIdx].sceneNum,
                         location: data.scenes[sceneIdx].location,
                         value: val,
                       })
                     }
-                    onMouseLeave={() => setHoveredCell(null)}
+                    onMouseLeave={handleCellLeave}
                   >
                     <div className="h-7 w-full" />
                   </div>
