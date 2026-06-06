@@ -178,6 +178,40 @@ export function analyzeCharacters(content: string): Promise<ChatResult> {
   });
 }
 
+// ─── 场景 CRUD ──────────────────────────────────
+
+export function createScene(
+  novelId: string,
+  data: { sceneNum: number; location: string; timeOfDay: string; yamlContent?: string }
+): Promise<Scene> {
+  return request(`/api/novels/${novelId}/scenes`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateScene(
+  sceneId: string,
+  data: { sceneNum?: number; location?: string; timeOfDay?: string }
+): Promise<Scene> {
+  return request(`/api/scenes/${sceneId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteScene(sceneId: string, force?: boolean): Promise<{ ok: boolean }> {
+  const qs = force ? "?force=true" : "";
+  return request(`/api/scenes/${sceneId}${qs}`, { method: "DELETE" });
+}
+
+export function updateScript(scriptId: string, yamlContent: string): Promise<Script> {
+  return request(`/api/scripts/${scriptId}`, {
+    method: "PUT",
+    body: JSON.stringify({ yamlContent }),
+  });
+}
+
 // ─── 场景锁定/解锁 ──────────────────────────────────
 
 export function lockScene(sceneId: string): Promise<{ ok: boolean; isLocked: boolean }> {

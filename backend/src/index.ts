@@ -981,6 +981,165 @@ app.post("/api/scenes/:id/rollback", async (req, res) => {
   }
 });
 
+// --- 🆕 场景 CRUD ---
+
+// 手动创建场景
+app.post("/api/novels/:id/scenes", async (req, res) => {
+  try {
+    const { sceneNum, location, timeOfDay, yamlContent } = req.body;
+
+    if (sceneNum == null || !location || !timeOfDay) {
+      return res.status(400).json({ error: "缺少必填字段: sceneNum, location, timeOfDay" });
+    }
+
+    // 检测 sceneNum 冲突
+    const existing = await prisma.scene.findFirst({
+      where: { novelId: req.params.id, sceneNum: Number(sceneNum) },
+    });
+    if (existing) {
+      return res.status(409).json({ error: `场景 ${sceneNum} 已存在，请使用其他编号` });
+    }
+
+    // 创建场景
+    const scene = await prisma.scene.create({
+      data: {
+        novelId: req.params.id,
+        sceneNum: Number(sceneNum),
+        location,
+        timeOfDay,
+      },
+    });
+
+    // 如果提供了剧本内容，创建初始 Script
+    if (yamlContent && yamlContent.trim()) {
+      const script = await prisma.script.create({
+        data: {
+          sceneId: scene.id,
+          yamlContent: yamlContent.trim(),
+          version: 1,
+          createdBy: "user",
+        },
+      });
+      await prisma.scene.update({
+        where: { id: scene.id },
+        data: { currentVersionId: script.id },
+      });
+
+      const updated = await prisma.scene.findUnique({
+        where: { id: scene.id },
+        include: { scripts: true },
+      });
+      return res.status(201).json(updated);
+    }
+
+    res.status(201).json(scene);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 更新场景元数据
+app.put("/api/scenes/:id", async (req, res) => {
+  try {
+    const scene = await prisma.scene.findUnique({ where: { id: req.params.id } });
+    if (!scene) return res.status(404).json({ error: "场景不存在" });
+
+    // 锁保护
+    if (scene.isLocked) {
+      return res.status(423).json({ error: "场景已锁定，请先解锁后再修改" });
+    }
+
+    const { sceneNum, location, timeOfDay } = req.body;
+
+    // 如果变更 sceneNum，检查冲突
+    if (sceneNum != null && Number(sceneNum) !== scene.sceneNum) {
+      const conflict = await prisma.scene.findFirst({
+        where: { novelId: scene.novelId, sceneNum: Number(sceneNum) },
+      });
+      if (conflict) {
+        return res.status(409).json({ error: `场景 ${sceneNum} 已存在` });
+      }
+    }
+
+    const updated = await prisma.scene.update({
+      where: { id: req.params.id },
+      data: {
+        ...(sceneNum != null && { sceneNum: Number(sceneNum) }),
+        ...(location != null && { location }),
+        ...(timeOfDay != null && { timeOfDay }),
+      },
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 删除场景
+app.delete("/api/scenes/:id", async (req, res) => {
+  try {
+    const scene = await prisma.scene.findUnique({ where: { id: req.params.id } });
+    if (!scene) return res.status(404).json({ error: "场景不存在" });
+
+    // 锁保护
+    const force = req.query.force === "true";
+    if (scene.isLocked && !force) {
+      return res.status(423).json({ error: "场景已锁定，请先解锁或使用 force=true 强制删除" });
+    }
+
+    await prisma.scene.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 编辑剧本（创建新版本）
+app.put("/api/scripts/:id", async (req, res) => {
+  try {
+    const { yamlContent } = req.body;
+    if (!yamlContent || !yamlContent.trim()) {
+      return res.status(400).json({ error: "缺少 yamlContent" });
+    }
+
+    const currentScript = await prisma.script.findUnique({
+      where: { id: req.params.id },
+      include: { scene: true },
+    });
+    if (!currentScript) return res.status(404).json({ error: "剧本不存在" });
+
+    // 获取最新版本号
+    const latest = await prisma.script.findFirst({
+      where: { sceneId: currentScript.sceneId },
+      orderBy: { version: "desc" },
+    });
+    const nextVersion = (latest?.version || 0) + 1;
+
+    // 创建新版本（版本链模式）
+    const newScript = await prisma.script.create({
+      data: {
+        sceneId: currentScript.sceneId,
+        yamlContent: yamlContent.trim(),
+        version: nextVersion,
+        createdBy: "user",
+        parentVersionId: currentScript.id,
+      },
+    });
+
+    // 更新场景当前活跃版本
+    await prisma.scene.update({
+      where: { id: currentScript.sceneId },
+      data: { currentVersionId: newScript.id },
+    });
+
+    console.log(`✏️ 手动编辑剧本: 场景 ${currentScript.scene.location} → v${nextVersion}`);
+    res.json(newScript);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 🆕 场景锁定/解锁 ---
 
 app.put("/api/scenes/:id/lock", async (req, res) => {

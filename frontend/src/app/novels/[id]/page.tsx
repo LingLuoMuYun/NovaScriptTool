@@ -12,6 +12,7 @@ import ScriptViewer from "@/components/ScriptViewer";
 import PipelineProgress from "@/components/PipelineProgress";
 import AnnotationPanel from "@/components/AnnotationPanel";
 import ImpactDialog from "@/components/ImpactDialog";
+import SceneEditor from "@/components/SceneEditor";
 import { buildDeps, analyzeImpact, runIncrementalPipeline } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -47,6 +48,10 @@ export default function NovelDetailPage() {
   } | null>(null);
   const [impactLoading, setImpactLoading] = useState(false);
   const [buildingDeps, setBuildingDeps] = useState(false);
+  // 场景编辑器状态
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
+  const [editingScene, setEditingScene] = useState<SceneWithScripts | null>(null);
 
   const fetchNovel = useCallback(async () => {
     setFetchError("");
@@ -230,6 +235,38 @@ export default function NovelDetailPage() {
     } finally {
       setPipelining(false);
     }
+  };
+
+  // ─── 场景 CRUD 回调 ───────────────────────────
+
+  const handleCreateScene = () => {
+    setEditorMode("create");
+    setEditingScene(null);
+    setShowEditor(true);
+  };
+
+  const handleEditScene = (scene: SceneWithScripts) => {
+    setEditorMode("edit");
+    setEditingScene(scene);
+    setShowEditor(true);
+  };
+
+  const handleDeleteScene = async (sceneId: string) => {
+    // 如果删除的是当前选中的场景，清除选中
+    if (selectedScene?.id === sceneId) {
+      setSelectedScene(null);
+    }
+    await fetchNovel();
+  };
+
+  const handleSceneSaved = async (_scene: SceneWithScripts) => {
+    setShowEditor(false);
+    setEditingScene(null);
+    await fetchNovel();
+  };
+
+  const handleScriptUpdate = async () => {
+    await fetchNovel();
   };
 
   if (loading) {
@@ -482,12 +519,15 @@ export default function NovelDetailPage() {
               onSelectScene={setSelectedScene}
               selectedSceneId={selectedScene?.id}
               onRefresh={fetchNovel}
+              onCreateScene={handleCreateScene}
+              onEditScene={handleEditScene}
+              onDeleteScene={handleDeleteScene}
             />
           </div>
           <div className="lg:col-span-3">
             <h3 className="mb-3 text-sm font-medium text-gray-500">剧本内容</h3>
             {selectedScene ? (
-              <ScriptViewer scene={selectedScene} />
+              <ScriptViewer scene={selectedScene} onScriptUpdate={handleScriptUpdate} />
             ) : (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
                 <p className="text-4xl">👈</p>
@@ -504,6 +544,21 @@ export default function NovelDetailPage() {
           targetType="scene"
           targetId={selectedScene?.id || ""}
           targetLabel={selectedScene ? `Scene ${selectedScene.sceneNum} - ${selectedScene.location}` : undefined}
+        />
+      )}
+
+      {/* 场景编辑弹窗 */}
+      {showEditor && (
+        <SceneEditor
+          mode={editorMode}
+          novelId={id}
+          scene={editingScene || undefined}
+          suggestedSceneNum={scenes.length > 0 ? Math.max(...scenes.map((s) => s.sceneNum)) + 1 : 1}
+          onSave={handleSceneSaved}
+          onCancel={() => {
+            setShowEditor(false);
+            setEditingScene(null);
+          }}
         />
       )}
 
