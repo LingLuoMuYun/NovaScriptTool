@@ -588,6 +588,133 @@ app.post("/api/novels/:id/process", async (req, res) => {
   }
 });
 
+// --- SSE 流式流水线 ---
+
+app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
+  // SSE 响应头
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // 禁用 nginx 缓冲
+  res.flushHeaders();
+
+  const sendEvent = (event: any) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  let aborted = false;
+  req.on("close", () => { aborted = true; });
+
+  try {
+    const novel = await prisma.novel.findUnique({ where: { id: req.params.id } });
+    if (!novel) {
+      sendEvent({ stage: "error", progress: 0, message: "小说不存在" });
+      return res.end();
+    }
+    if (!novel.content || novel.content.trim().length < 50) {
+      sendEvent({ stage: "error", progress: 0, message: "小说内容过短" });
+      return res.end();
+    }
+
+    const { runAnalysisPipeline, runScriptGenerationPipeline } = await import("./services/ai.service");
+
+    console.log(`🚀 SSE 流水线启动: ${novel.title}`);
+
+    // 统一定义 onProgress，同时写 SSE 和日志
+    const onProgress = (event: any) => {
+      if (aborted) return;
+      sendEvent(event);
+      const detail = event.detail ? ` (${event.detail})` : "";
+      console.log(`  📡 SSE [${event.progress}%] ${event.message}${detail}`);
+    };
+
+    // 1. 分析阶段
+    await prisma.novel.update({ where: { id: req.params.id }, data: { status: "analyzing" } });
+    onProgress({ stage: "analyze", progress: 0, message: "🚀 启动分析流水线..." });
+
+    const analysisResult = await runAnalysisPipeline(novel.content, onProgress);
+    if (aborted) return;
+
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
+    });
+
+    // 存储角色
+    await prisma.character.deleteMany({ where: { novelId: req.params.id } });
+    if (analysisResult.characters.length > 0) {
+      await prisma.character.createMany({
+        data: analysisResult.characters.map((c) => ({
+          novelId: req.params.id,
+          name: c.name,
+          aliases: JSON.stringify(c.aliases || []),
+          roleType: c.roleType || "配角",
+          traits: JSON.stringify(c.traits || {}),
+        })),
+      });
+    }
+
+    // 2. 场景生成阶段
+    const scriptResult = await runScriptGenerationPipeline(
+      novel.content,
+      analysisResult.characters.map((c) => ({
+        name: c.name,
+        roleType: c.roleType,
+        traits: c.traits,
+      })),
+      onProgress
+    );
+    if (aborted) return;
+
+    // 3. 保存到数据库
+    onProgress({ stage: "save", progress: 96, message: "💾 正在保存到数据库..." });
+    await prisma.scene.deleteMany({ where: { novelId: req.params.id } });
+    for (const scene of scriptResult.scenes) {
+      const created = await prisma.scene.create({
+        data: {
+          novelId: req.params.id,
+          sceneNum: scene.sceneNum,
+          location: scene.location,
+          timeOfDay: scene.timeOfDay,
+        },
+      });
+      const script = scriptResult.scripts.find((s) => s.sceneNum === scene.sceneNum);
+      if (script) {
+        await prisma.script.create({
+          data: { sceneId: created.id, yamlContent: script.scriptYaml },
+        });
+      }
+    }
+
+    await prisma.novel.update({ where: { id: req.params.id }, data: { status: "completed" } });
+
+    onProgress({
+      stage: "done",
+      progress: 100,
+      message: "✅ 全部完成！",
+      detail: `${analysisResult.characters.length} 个角色，${scriptResult.scenes.length} 个场景`,
+      stats: {
+        characters: analysisResult.characters.length,
+        scenes: scriptResult.scenes.length,
+      },
+    });
+
+    console.log(`✅ SSE 流水线完成: ${novel.title}`);
+    res.end();
+
+  } catch (err: any) {
+    console.error("SSE 流水线失败:", err.message);
+    if (!aborted) {
+      sendEvent({ stage: "error", progress: 0, message: err.message });
+    }
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "draft" },
+    }).catch(() => {});
+    res.end();
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
   console.log(`Mimo Model: ${process.env.MIMO_MODEL || "mimo-v2.5"}`);

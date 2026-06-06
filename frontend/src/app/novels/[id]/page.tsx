@@ -9,6 +9,7 @@ import PlotOutline from "@/components/PlotOutline";
 import CharacterCard from "@/components/CharacterCard";
 import SceneList from "@/components/SceneList";
 import ScriptViewer from "@/components/ScriptViewer";
+import PipelineProgress from "@/components/PipelineProgress";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -27,6 +28,13 @@ export default function NovelDetailPage() {
   const [genError, setGenError] = useState("");
   const [pipelining, setPipelining] = useState(false);
   const [pipelineStep, setPipelineStep] = useState("");
+  // SSE 进度状态
+  const [pipeProgress, setPipeProgress] = useState(0);
+  const [pipeStage, setPipeStage] = useState("");
+  const [pipeMessage, setPipeMessage] = useState("");
+  const [pipeDetail, setPipeDetail] = useState("");
+  const [pipeStats, setPipeStats] = useState<any>(null);
+  const [pipeError, setPipeError] = useState("");
 
   const fetchNovel = useCallback(async () => {
     const data = await getNovel(id);
@@ -81,30 +89,74 @@ export default function NovelDetailPage() {
 
   const handlePipeline = async () => {
     setGenError("");
+    setPipeError("");
     setPipelining(true);
-    setPipelineStep("📖 阶段 1/2: 剧情分析 + 角色提取...");
+    setPipeProgress(0);
+    setPipeStage("");
+    setPipeMessage("正在连接...");
+    setPipeDetail("");
+    setPipeStats(null);
+
     try {
-      const res = await fetch(`${API_BASE}/api/novels/${id}/pipeline`, { method: "POST" });
+      const res = await fetch(`${API_BASE}/api/novels/${id}/pipeline-stream`);
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "流水线失败" }));
+        const err = await res.json().catch(() => ({ error: "流水线启动失败" }));
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-      const result = await res.json();
-      setPipelineStep(`✅ 完成！${result.stats.characters} 个角色，${result.stats.scenes} 个场景`);
-      setAnalysis(result.plot);
-      setCharacters(
-        result.characters.map((c: any, i: number) => ({
-          id: `pipe-${i}`, novelId: id,
-          name: c.name, aliases: JSON.stringify(c.aliases || []),
-          roleType: c.roleType || "配角", traits: JSON.stringify(c.traits || {}),
-        }))
-      );
-      await fetchNovel();
-    } catch (err: any) {
-      setGenError(err.message);
-    } finally {
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("不支持流式响应");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              setPipeProgress(event.progress || 0);
+              setPipeStage(event.stage || "");
+              setPipeMessage(event.message || "");
+              setPipeDetail(event.detail || "");
+              setPipeStats(event.stats || null);
+
+              if (event.stage === "done") {
+                // 流水线完成，刷新页面数据
+                setPipelining(false);
+                await fetchNovel();
+                // 提取角色和剧本数据展示
+                if (event.stats) {
+                  setPipelineStep(`✅ 完成！${event.stats.characters || 0} 个角色，${event.stats.scenes || 0} 个场景`);
+                }
+                return;
+              }
+
+              if (event.stage === "error") {
+                setPipeError(event.message || "未知错误");
+                setPipelining(false);
+                return;
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // reader done but no "done" event received — refresh anyway
       setPipelining(false);
-      setPipelineStep((s) => s.startsWith("✅") ? s : "");
+      await fetchNovel();
+
+    } catch (err: any) {
+      setPipeError(err.message);
+      setPipelining(false);
     }
   };
 
@@ -230,10 +282,25 @@ export default function NovelDetailPage() {
             <p className="mt-1 whitespace-pre-wrap text-sm text-red-600">{genError}</p>
           </div>
         )}
-        {pipelineStep && !genError && (
-          <p className="text-sm text-indigo-600">{pipelineStep}</p>
+        {pipelineStep && !genError && !pipelining && (
+          <p className="text-sm text-green-600">{pipelineStep}</p>
         )}
       </div>
+
+      {/* 流水线进度可视化 */}
+      {(pipelining || pipeStage === "done" || pipeError) && (
+        <div className="mb-6">
+          <PipelineProgress
+            progress={pipeProgress}
+            stage={pipeStage}
+            message={pipeMessage}
+            detail={pipeDetail}
+            stats={pipeStats}
+            error={pipeError}
+            isRunning={pipelining}
+          />
+        </div>
+      )}
 
       {/* Tab 导航 */}
       <div className="mb-6 flex gap-2 border-b border-gray-200">

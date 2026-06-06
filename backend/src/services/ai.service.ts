@@ -279,6 +279,18 @@ export function parseAIJson(content: string): any {
   throw new Error(`无法解析 AI 响应为 JSON，原始内容前200字: ${content.substring(0, 200)}`);
 }
 
+// --- 进度回调类型 ---
+
+export interface PipelineProgress {
+  stage: 'analyze' | 'characters' | 'scenes' | 'scripts' | 'save' | 'done' | 'error';
+  progress: number;   // 0-100
+  message: string;
+  detail?: string;
+  stats?: { characters?: number; scenes?: number; currentScene?: number; totalScenes?: number };
+}
+
+export type ProgressCallback = (event: PipelineProgress) => void;
+
 // --- 多 Agent 编排 ---
 
 export interface AnalysisResult {
@@ -311,21 +323,27 @@ export interface AnalysisResult {
  * Agent 1: 剧情解构 → Agent 2: 角色图谱
  * 内置降级策略：如遇安全拦截，自动缩短文本并关闭思维模式重试
  */
-export async function runAnalysisPipeline(novelContent: string): Promise<AnalysisResult> {
+export async function runAnalysisPipeline(
+  novelContent: string,
+  onProgress?: ProgressCallback
+): Promise<AnalysisResult> {
   // 文本预处理：如果太长，取前 15000 字做分析
   const truncatedContent = novelContent.length > 15000
     ? novelContent.substring(0, 15000) + "\n\n[文本过长，已截取前15000字分析...]"
     : novelContent;
 
+  const progress = (event: PipelineProgress) => onProgress?.(event);
+
   // 尝试主策略
   try {
-    return await _doAnalysis(truncatedContent, { thinking: true });
+    return await _doAnalysis(truncatedContent, { thinking: true }, onProgress);
   } catch (err: any) {
     const msg = err.message || "";
 
     // 判断是否为安全拦截
     if (msg.includes("安全") || msg.includes("rejected") || msg.includes("high risk") || msg.includes("content_filter")) {
       console.log("  ⚠️ 主策略被安全拦截，尝试降级策略（更短文本 + 关闭思维链）...");
+      progress({ stage: 'analyze', progress: 5, message: '⚠️ 内容被安全拦截，正在降级重试...' });
 
       // 降级策略：更短文本 + 关闭思维模式
       const fallbackContent = truncatedContent.length > 5000
@@ -333,7 +351,7 @@ export async function runAnalysisPipeline(novelContent: string): Promise<Analysi
         : truncatedContent.substring(0, Math.floor(truncatedContent.length * 0.6));
 
       try {
-        return await _doAnalysis(fallbackContent, { thinking: false });
+        return await _doAnalysis(fallbackContent, { thinking: false }, onProgress);
       } catch (fallbackErr: any) {
         const fbMsg = fallbackErr.message || "";
         if (fbMsg.includes("安全") || fbMsg.includes("rejected") || fbMsg.includes("high risk")) {
@@ -355,9 +373,13 @@ export async function runAnalysisPipeline(novelContent: string): Promise<Analysi
 /** 内部：执行实际的分析调用 */
 async function _doAnalysis(
   content: string,
-  options: { thinking: boolean }
+  options: { thinking: boolean },
+  onProgress?: ProgressCallback
 ): Promise<AnalysisResult> {
+  const progress = (event: PipelineProgress) => onProgress?.(event);
+
   // Agent 1: 剧情解构
+  progress({ stage: 'analyze', progress: 5, message: 'Agent 1: 正在解构剧情...' });
   console.log("  🧠 Agent 1: 剧情解构中...");
   const plotResponse = await chatCompletion(
     [
@@ -380,9 +402,16 @@ async function _doAnalysis(
     { responseFormat: "json_object", thinking: options.thinking }
   );
   const plotData = parseAIJson(plotResponse.content);
+  progress({
+    stage: 'analyze',
+    progress: 15,
+    message: '✅ 剧情解构完成',
+    detail: `大纲四段：${plotData.outline?.opening?.substring(0, 20) || '...'}...`,
+  });
   console.log("  ✅ Agent 1 完成");
 
   // Agent 2: 角色图谱
+  progress({ stage: 'characters', progress: 16, message: 'Agent 2: 正在提取角色图谱...' });
   console.log("  🧠 Agent 2: 角色提取中...");
   const charResponse = await chatCompletion(
     [
@@ -413,6 +442,14 @@ async function _doAnalysis(
     { responseFormat: "json_object", thinking: options.thinking }
   );
   const charData = parseAIJson(charResponse.content);
+  const charCount = charData.characters?.length || 0;
+  progress({
+    stage: 'characters',
+    progress: 30,
+    message: `✅ 角色提取完成`,
+    detail: `识别到 ${charCount} 个角色`,
+    stats: { characters: charCount },
+  });
   console.log("  ✅ Agent 2 完成");
 
   return {
@@ -446,8 +483,11 @@ export interface GeneratedScript {
  */
 export async function runScriptGenerationPipeline(
   novelContent: string,
-  characters: { name: string; roleType: string; traits: any }[]
+  characters: { name: string; roleType: string; traits: any }[],
+  onProgress?: ProgressCallback
 ): Promise<{ scenes: GeneratedScene[]; scripts: GeneratedScript[] }> {
+  const progress = (event: PipelineProgress) => onProgress?.(event);
+
   let truncatedContent = novelContent.length > 12000
     ? novelContent.substring(0, 12000) + "\n\n[文本截取]"
     : novelContent;
@@ -460,19 +500,37 @@ export async function runScriptGenerationPipeline(
 
   // Agent 3: 场景规划（带降级）
   let sceneData: any;
+  progress({ stage: 'scenes', progress: 31, message: 'Agent 3: 正在规划场景...' });
   try {
     console.log("  🎬 Agent 3: 场景规划中...");
     const sceneResponse = await planScenes(truncatedContent, charSummary);
     sceneData = parseAIJson(sceneResponse.content);
-    console.log(`  ✅ Agent 3 完成 (${sceneData.scenes?.length || 0} 个场景)`);
+    const sceneCount = sceneData.scenes?.length || 0;
+    progress({
+      stage: 'scenes',
+      progress: 50,
+      message: `✅ 场景规划完成`,
+      detail: `共划分 ${sceneCount} 个场景`,
+      stats: { scenes: sceneCount },
+    });
+    console.log(`  ✅ Agent 3 完成 (${sceneCount} 个场景)`);
   } catch (err: any) {
     const msg = err.message || "";
     if (msg.includes("安全") || msg.includes("rejected") || msg.includes("high risk")) {
       console.log("  ⚠️ 场景规划被拦截，尝试更短文本...");
+      progress({ stage: 'scenes', progress: 35, message: '⚠️ 场景规划被拦截，降级重试中...' });
       truncatedContent = truncatedContent.substring(0, Math.floor(truncatedContent.length * 0.5));
       const retryResponse = await planScenes(truncatedContent, charSummary);
       sceneData = parseAIJson(retryResponse.content);
-      console.log(`  ✅ Agent 3 降级完成 (${sceneData.scenes?.length || 0} 个场景)`);
+      const sceneCount = sceneData.scenes?.length || 0;
+      progress({
+        stage: 'scenes',
+        progress: 50,
+        message: `✅ 场景规划完成（降级）`,
+        detail: `共划分 ${sceneCount} 个场景`,
+        stats: { scenes: sceneCount },
+      });
+      console.log(`  ✅ Agent 3 降级完成 (${sceneCount} 个场景)`);
     } else {
       throw err;
     }
@@ -488,14 +546,28 @@ export async function runScriptGenerationPipeline(
   }));
 
   // Agent 4: 逐场景生成剧本
+  const totalScenes = scenes.length;
   const scripts: GeneratedScript[] = [];
-  for (const scene of scenes) {
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
     const sceneChars = characters.filter((c) =>
       scene.characterNames.some((n: string) => n.includes(c.name) || c.name.includes(n))
     );
     if (sceneChars.length === 0 && characters.length > 0) {
       sceneChars.push(...characters.slice(0, 2)); // fallback: 前2个角色
     }
+
+    // 推进度：50% - 95% 按场景数量分配
+    const progressPercent = totalScenes > 0
+      ? Math.round(50 + ((i + 1) / totalScenes) * 45)
+      : 95;
+    progress({
+      stage: 'scripts',
+      progress: progressPercent,
+      message: `Agent 4: 正在撰写场景剧本...`,
+      detail: `场景 ${scene.sceneNum}/${totalScenes}: ${scene.location}`,
+      stats: { currentScene: i + 1, totalScenes },
+    });
 
     console.log(`  ✍️ Agent 4: 生成场景 ${scene.sceneNum} 剧本...`);
     try {
@@ -525,5 +597,6 @@ export async function runScriptGenerationPipeline(
     }
   }
 
+  progress({ stage: 'scripts', progress: 95, message: `✅ 剧本生成完成`, detail: `成功生成 ${scripts.length} 个场景剧本` });
   return { scenes, scripts };
 }
