@@ -189,6 +189,88 @@ app.post("/api/novels/:id/analyze", async (req, res) => {
   }
 });
 
+// --- Agent 编排：生成场景剧本 ---
+
+app.post("/api/novels/:id/generate-scripts", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { characters: true },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+    if (novel.characters.length === 0) return res.status(400).json({ error: "请先执行角色分析" });
+
+    const { runScriptGenerationPipeline } = await import("./services/ai.service");
+
+    // 解析角色数据
+    const characters = novel.characters.map((c) => ({
+      name: c.name,
+      roleType: c.roleType,
+      traits: JSON.parse(c.traits || "{}"),
+    }));
+
+    console.log(`🎬 开始生成场景剧本: ${novel.title}`);
+    const result = await runScriptGenerationPipeline(novel.content, characters);
+
+    // 删除旧场景
+    await prisma.scene.deleteMany({ where: { novelId: req.params.id } });
+
+    // 批量创建场景和剧本
+    for (const scene of result.scenes) {
+      const created = await prisma.scene.create({
+        data: {
+          novelId: req.params.id,
+          sceneNum: scene.sceneNum,
+          location: scene.location,
+          timeOfDay: scene.timeOfDay,
+        },
+      });
+
+      // 找到对应剧本
+      const script = result.scripts.find((s) => s.sceneNum === scene.sceneNum);
+      if (script) {
+        await prisma.script.create({
+          data: {
+            sceneId: created.id,
+            yamlContent: script.scriptYaml,
+          },
+        });
+      }
+    }
+
+    // 更新小说状态
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "completed" },
+    });
+
+    console.log(`✅ 场景剧本生成完成: ${novel.title} (${result.scenes.length} 个场景)`);
+
+    res.json({
+      scenes: result.scenes,
+      scripts: result.scripts,
+      sceneCount: result.scenes.length,
+    });
+  } catch (err: any) {
+    console.error("生成失败:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 获取小说的场景列表
+app.get("/api/novels/:id/scenes", async (req, res) => {
+  try {
+    const scenes = await prisma.scene.findMany({
+      where: { novelId: req.params.id },
+      orderBy: { sceneNum: "asc" },
+      include: { scripts: true },
+    });
+    res.json(scenes);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 获取小说的角色列表
 app.get("/api/novels/:id/characters", async (req, res) => {
   try {

@@ -294,3 +294,80 @@ export async function runAnalysisPipeline(novelContent: string): Promise<Analysi
     characters: charData.characters || [],
   };
 }
+
+// --- 场景生成流水线 ---
+
+export interface GeneratedScene {
+  sceneNum: number;
+  location: string;
+  timeOfDay: string;
+  indoor: boolean;
+  characterNames: string[];
+  summary: string;
+}
+
+export interface GeneratedScript {
+  sceneNum: number;
+  location: string;
+  timeOfDay: string;
+  scriptYaml: string;
+}
+
+/**
+ * 执行 Agent 3 + Agent 4 场景生成流水线
+ * Agent 3: 场景规划 → Agent 4: 逐场景剧本生成
+ */
+export async function runScriptGenerationPipeline(
+  novelContent: string,
+  characters: { name: string; roleType: string; traits: any }[]
+): Promise<{ scenes: GeneratedScene[]; scripts: GeneratedScript[] }> {
+  const truncatedContent = novelContent.length > 12000
+    ? novelContent.substring(0, 12000) + "\n\n[文本截取]"
+    : novelContent;
+
+  const charSummary = characters.map((c) => ({
+    name: c.name,
+    roleType: c.roleType,
+    personality: c.traits?.personality || [],
+  }));
+
+  // Agent 3: 场景规划
+  console.log("  🎬 Agent 3: 场景规划中...");
+  const sceneResponse = await planScenes(truncatedContent, charSummary);
+  const sceneData = parseAIJson(sceneResponse.content);
+  console.log(`  ✅ Agent 3 完成 (${sceneData.scenes?.length || 0} 个场景)`);
+
+  const scenes: GeneratedScene[] = (sceneData.scenes || []).map((s: any, i: number) => ({
+    sceneNum: s.sceneNum || i + 1,
+    location: s.location || "未知地点",
+    timeOfDay: s.timeOfDay || "日",
+    indoor: s.indoor !== false,
+    characterNames: s.characterIds || s.characterNames || [],
+    summary: s.summary || "",
+  }));
+
+  // Agent 4: 逐场景生成剧本
+  const scripts: GeneratedScript[] = [];
+  for (const scene of scenes) {
+    const sceneChars = characters.filter((c) =>
+      scene.characterNames.some((n: string) => n.includes(c.name) || c.name.includes(n))
+    );
+    if (sceneChars.length === 0 && characters.length > 0) {
+      sceneChars.push(...characters.slice(0, 2)); // fallback: 前2个角色
+    }
+
+    console.log(`  ✍️ Agent 4: 生成场景 ${scene.sceneNum} 剧本...`);
+    const scriptResponse = await writeScript(scene, sceneChars);
+    const scriptData = parseAIJson(scriptResponse.content);
+    console.log(`  ✅ 场景 ${scene.sceneNum} 剧本完成`);
+
+    scripts.push({
+      sceneNum: scene.sceneNum,
+      location: scene.location,
+      timeOfDay: scene.timeOfDay,
+      scriptYaml: scriptData.script || JSON.stringify(scriptData),
+    });
+  }
+
+  return { scenes, scripts };
+}
