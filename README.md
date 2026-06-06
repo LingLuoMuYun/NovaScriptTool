@@ -548,11 +548,14 @@ curl -X POST http://localhost:4000/api/novels/:id/incremental-pipeline \
 - [x] 4 Agent 服务接口（剧情解构 / 角色图谱 / 场记统筹 / 剧本主笔）
 - [x] SSE 实时进度可视化
 - [x] 人工干预模块（场景锁定 / 创作注记 / 版本管理 / Diff 对比 / 增量重算）
+- [x] 剧本 CRUD 手动编辑（创建场景、编辑剧本、删除场景）
 - [ ] 小说文本分块上传与解析
 - [ ] YAML Schema 强校验输出
 - [ ] 前端双栏工作台（原文 ↔ YAML 实时映射）
 - [ ] 角色关系网络图可视化
 - [ ] Docker 一键部署
+
+> 📚 **完整开发文档**: [DEVELOPMENT.md](DEVELOPMENT.md) — 包含系统架构、数据库 ER 图、26 个 API 接口详情、组件树、以及后续新功能与优化清单
 
 ## 📄 License
 
