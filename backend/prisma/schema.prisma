@@ -3,17 +3,17 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model Novel {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String      @id @default(uuid())
   title     String
-  content   String   @db.Text
-  status    String   @default("draft")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  content   String
+  status    String      @default("draft")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
 
   characters Character[]
   scenes     Scene[]
@@ -22,12 +22,12 @@ model Novel {
 }
 
 model Character {
-  id       String   @id @default(uuid()) @db.Uuid
-  novelId  String   @map("novel_id") @db.Uuid
+  id       String  @id @default(uuid())
+  novelId  String  @map("novel_id")
   name     String
-  aliases  String[]
-  roleType String   @map("role_type")
-  traits   Json     @default("{}")
+  aliases  String  @default("[]")
+  roleType String  @map("role_type")
+  traits   String  @default("{}")
 
   novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
 
@@ -35,8 +35,8 @@ model Character {
 }
 
 model Scene {
-  id        String @id @default(uuid()) @db.Uuid
-  novelId   String @map("novel_id") @db.Uuid
+  id        String @id @default(uuid())
+  novelId   String @map("novel_id")
   sceneNum  Int    @map("scene_num")
   location  String
   timeOfDay String @map("time_of_day")
@@ -48,9 +48,9 @@ model Scene {
 }
 
 model Script {
-  id          String   @id @default(uuid()) @db.Uuid
-  sceneId     String   @map("scene_id") @db.Uuid
-  yamlContent String   @map("yaml_content") @db.Text
+  id          String   @id @default(uuid())
+  sceneId     String   @map("scene_id")
+  yamlContent String   @map("yaml_content")
   version     Int      @default(1)
   createdAt   DateTime @default(now()) @map("created_at")
 
