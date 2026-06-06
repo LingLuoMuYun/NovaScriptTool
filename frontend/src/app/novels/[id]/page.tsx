@@ -10,6 +10,8 @@ import CharacterCard from "@/components/CharacterCard";
 import SceneList from "@/components/SceneList";
 import ScriptViewer from "@/components/ScriptViewer";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 type SceneWithScripts = Scene & { scripts?: Script[] };
 
 export default function NovelDetailPage() {
@@ -23,6 +25,8 @@ export default function NovelDetailPage() {
   const [selectedScene, setSelectedScene] = useState<SceneWithScripts | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [pipelining, setPipelining] = useState(false);
+  const [pipelineStep, setPipelineStep] = useState("");
 
   const fetchNovel = useCallback(async () => {
     const data = await getNovel(id);
@@ -57,7 +61,7 @@ export default function NovelDetailPage() {
     setGenError("");
     setGenerating(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/novels/${id}/generate-scripts`, {
+      const res = await fetch(`${API_BASE}/api/novels/${id}/generate-scripts`, {
         method: "POST",
       });
       if (!res.ok) {
@@ -73,6 +77,39 @@ export default function NovelDetailPage() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handlePipeline = async () => {
+    setGenError("");
+    setPipelining(true);
+    setPipelineStep("📖 阶段 1/2: 剧情分析 + 角色提取...");
+    try {
+      const res = await fetch(`${API_BASE}/api/novels/${id}/pipeline`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "流水线失败" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const result = await res.json();
+      setPipelineStep(`✅ 完成！${result.stats.characters} 个角色，${result.stats.scenes} 个场景`);
+      setAnalysis(result.plot);
+      setCharacters(
+        result.characters.map((c: any, i: number) => ({
+          id: `pipe-${i}`, novelId: id,
+          name: c.name, aliases: JSON.stringify(c.aliases || []),
+          roleType: c.roleType || "配角", traits: JSON.stringify(c.traits || {}),
+        }))
+      );
+      await fetchNovel();
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setPipelining(false);
+      setPipelineStep((s) => s.startsWith("✅") ? s : "");
+    }
+  };
+
+  const handleExport = () => {
+    window.open(`${API_BASE}/api/novels/${id}/export`, "_blank");
   };
 
   if (loading) {
@@ -134,6 +171,26 @@ export default function NovelDetailPage() {
 
       {/* 操作按钮 */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        {/* 一键流水线（草稿或已分析状态均可使用） */}
+        <button
+          onClick={handlePipeline}
+          disabled={pipelining}
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {pipelining ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              AI 全流程处理中...（1-2 分钟）
+            </>
+          ) : (
+            <>🚀 一键生成（分析 + 剧本）</>
+          )}
+        </button>
+
+        {/* 分步操作 */}
         {novel.status === "draft" && (
           <AnalyzeButton novelId={id} onAnalyzed={handleAnalyzed} />
         )}
@@ -149,16 +206,28 @@ export default function NovelDetailPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                AI 生成剧本中...（可能需要 30-60 秒）
+                AI 生成剧本中...（30-60 秒）
               </>
             ) : (
-              <>
-                🎬 生成场景剧本
-              </>
+              <>🎬 生成场景剧本</>
             )}
           </button>
         )}
+
+        {/* 导出 YAML */}
+        {scenes.length > 0 && (
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 rounded-xl bg-gray-800 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-gray-900"
+          >
+            📥 导出 YAML
+          </button>
+        )}
+
         {genError && <p className="text-sm text-red-600">❌ {genError}</p>}
+        {pipelineStep && !genError && (
+          <p className="text-sm text-indigo-600">{pipelineStep}</p>
+        )}
       </div>
 
       {/* Tab 导航 */}

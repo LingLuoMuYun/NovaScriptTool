@@ -257,6 +257,150 @@ app.post("/api/novels/:id/generate-scripts", async (req, res) => {
   }
 });
 
+// --- 一键流水线：Agent 1→2→3→4 ---
+
+app.post("/api/novels/:id/pipeline", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({ where: { id: req.params.id } });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+    if (!novel.content || novel.content.trim().length < 50) {
+      return res.status(400).json({ error: "小说内容过短" });
+    }
+
+    const { runAnalysisPipeline, runScriptGenerationPipeline } = await import("./services/ai.service");
+
+    console.log(`🚀 一键流水线启动: ${novel.title}`);
+
+    // 1. 分析
+    await prisma.novel.update({ where: { id: req.params.id }, data: { status: "analyzing" } });
+    console.log("📖 阶段 1/2: 剧情分析 + 角色提取");
+    const analysisResult = await runAnalysisPipeline(novel.content);
+
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
+    });
+
+    // 存储角色
+    await prisma.character.deleteMany({ where: { novelId: req.params.id } });
+    if (analysisResult.characters.length > 0) {
+      await prisma.character.createMany({
+        data: analysisResult.characters.map((c) => ({
+          novelId: req.params.id,
+          name: c.name,
+          aliases: JSON.stringify(c.aliases || []),
+          roleType: c.roleType || "配角",
+          traits: JSON.stringify(c.traits || {}),
+        })),
+      });
+    }
+
+    // 2. 生成场景剧本
+    console.log("🎬 阶段 2/2: 场景规划 + 剧本生成");
+    const scriptResult = await runScriptGenerationPipeline(
+      novel.content,
+      analysisResult.characters.map((c) => ({
+        name: c.name,
+        roleType: c.roleType,
+        traits: c.traits,
+      }))
+    );
+
+    await prisma.scene.deleteMany({ where: { novelId: req.params.id } });
+    for (const scene of scriptResult.scenes) {
+      const created = await prisma.scene.create({
+        data: {
+          novelId: req.params.id,
+          sceneNum: scene.sceneNum,
+          location: scene.location,
+          timeOfDay: scene.timeOfDay,
+        },
+      });
+      const script = scriptResult.scripts.find((s) => s.sceneNum === scene.sceneNum);
+      if (script) {
+        await prisma.script.create({
+          data: { sceneId: created.id, yamlContent: script.scriptYaml },
+        });
+      }
+    }
+
+    await prisma.novel.update({ where: { id: req.params.id }, data: { status: "completed" } });
+
+    console.log(`✅ 一键流水线完成: ${novel.title}`);
+    res.json({
+      plot: analysisResult.plot,
+      characters: analysisResult.characters,
+      scenes: scriptResult.scenes,
+      scripts: scriptResult.scripts,
+      stats: {
+        characters: analysisResult.characters.length,
+        scenes: scriptResult.scenes.length,
+      },
+    });
+  } catch (err: any) {
+    await prisma.novel.update({
+      where: { id: req.params.id },
+      data: { status: "draft" },
+    }).catch(() => {});
+    console.error("流水线失败:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- YAML 导出 ---
+
+app.get("/api/novels/:id/export", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { scenes: { include: { scripts: true }, orderBy: { sceneNum: "asc" } } },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    // 构建完整 YAML
+    let yaml = "";
+    yaml += `# ==========================================\n`;
+    yaml += `# 剧本: ${novel.title}\n`;
+    yaml += `# 生成时间: ${new Date().toISOString()}\n`;
+    yaml += `# 场景总数: ${novel.scenes.length}\n`;
+    yaml += `# ==========================================\n\n`;
+
+    if (novel.scenes.length === 0) {
+      yaml += "# ⚠️ 暂未生成场景剧本，请先运行分析流水线\n";
+    }
+
+    for (const scene of novel.scenes) {
+      const script = scene.scripts?.[0];
+      yaml += `---\n`;
+      yaml += `# Scene ${scene.sceneNum}: ${scene.location} | ${scene.timeOfDay}\n`;
+      yaml += `scene:\n`;
+      yaml += `  number: ${scene.sceneNum}\n`;
+      yaml += `  location: "${scene.location}"\n`;
+      yaml += `  time_of_day: "${scene.timeOfDay}"\n`;
+
+      if (script) {
+        yaml += `\n`;
+        yaml += script.yamlContent;
+        yaml += `\n`;
+      } else {
+        yaml += `  script: |\n`;
+        yaml += `    # 未生成\n`;
+      }
+      yaml += `\n`;
+    }
+
+    res.setHeader("Content-Type", "text/yaml; charset=utf-8");
+    const safeName = novel.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}_%E5%89%A7%E6%9C%AC.yaml`
+    );
+    res.send(yaml);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 获取小说的场景列表
 app.get("/api/novels/:id/scenes", async (req, res) => {
   try {
