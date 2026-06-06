@@ -22,6 +22,7 @@ export default function NovelDetailPage() {
   const [scenes, setScenes] = useState<SceneWithScripts[]>([]);
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
   const [activeTab, setActiveTab] = useState<"info" | "plot" | "characters" | "scenes">("info");
   const [selectedScene, setSelectedScene] = useState<SceneWithScripts | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -37,17 +38,23 @@ export default function NovelDetailPage() {
   const [pipeError, setPipeError] = useState("");
 
   const fetchNovel = useCallback(async () => {
-    const data = await getNovel(id);
-    setNovel(data);
-    setCharacters(data.characters || []);
-    setScenes((data.scenes || []) as SceneWithScripts[]);
-    if (data.analysis) {
-      try { setAnalysis(JSON.parse(data.analysis)); } catch {}
+    setFetchError("");
+    try {
+      const data = await getNovel(id);
+      setNovel(data);
+      setCharacters(data.characters || []);
+      setScenes((data.scenes || []) as SceneWithScripts[]);
+      if (data.analysis) {
+        try { setAnalysis(JSON.parse(data.analysis)); } catch {}
+      }
+    } catch (err: any) {
+      console.error("获取小说详情失败:", err.message);
+      setFetchError(err.message || "加载失败");
     }
   }, [id]);
 
   useEffect(() => {
-    fetchNovel().then(() => setLoading(false));
+    fetchNovel().finally(() => setLoading(false));
   }, [fetchNovel]);
 
   const handleAnalyzed = useCallback((result: any) => {
@@ -167,7 +174,36 @@ export default function NovelDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-400">加载中...</p>
+        <div className="text-center">
+          <svg className="mx-auto h-8 w-8 animate-spin text-indigo-500" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="mt-3 text-gray-400">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-4xl">⚠️</p>
+          <p className="mt-3 text-gray-700">加载小说失败</p>
+          <p className="mt-1 text-sm text-red-500">{fetchError}</p>
+          <div className="mt-4 flex gap-3 justify-center">
+            <button
+              onClick={() => { setLoading(true); fetchNovel().finally(() => setLoading(false)); }}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 transition"
+            >
+              🔄 重试
+            </button>
+            <Link href="/" className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition">
+              ← 返回首页
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -178,6 +214,7 @@ export default function NovelDetailPage() {
         <div className="text-center">
           <p className="text-4xl">📭</p>
           <p className="mt-2 text-gray-500">小说不存在</p>
+          <p className="mt-1 text-sm text-gray-400">该小说可能已被删除，或 ID 无效</p>
           <Link href="/" className="mt-4 inline-block text-indigo-600 hover:underline">
             ← 返回首页
           </Link>
