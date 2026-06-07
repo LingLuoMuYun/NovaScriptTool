@@ -21,6 +21,8 @@ interface DualPaneEditorProps {
   onSaved: () => void;
   /** 取消回调 */
   onCancel: () => void;
+  /** 全屏模式：隐藏外层工具栏，填满父容器 */
+  fullScreen?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ export default function DualPaneEditor({
   characterNames = [],
   onSaved,
   onCancel,
+  fullScreen = false,
 }: DualPaneEditorProps) {
   const [editContent, setEditContent] = useState(script.yamlContent);
   const [saving, setSaving] = useState(false);
@@ -180,26 +183,28 @@ export default function DualPaneEditor({
   // ─── 渲染 ────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px]">
+    <div className={`flex flex-col ${fullScreen ? "h-full" : "h-[calc(100vh-200px)] min-h-[500px]"}`}>
       {/* 顶部工具栏 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 rounded-t-xl">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">
-            📝 双栏编辑 — {sceneLabel}
-          </h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500">
-            📍 {sceneMeta.location} · ⏰ {sceneMeta.timeOfDay}
-            {sceneMeta.isLocked && " · 🔒 已锁定"}
-          </span>
+      {!fullScreen && (
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">
+              📝 双栏编辑 — {sceneLabel}
+            </h3>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              📍 {sceneMeta.location} · ⏰ {sceneMeta.timeOfDay}
+              {sceneMeta.isLocked && " · 🔒 已锁定"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              当前版本 v{script.version} → 保存为 v{script.version + 1}
+            </span>
+            <span className="text-xs text-gray-300 dark:text-gray-600">|</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">⌘S 保存</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 dark:text-gray-500">
-            当前版本 v{script.version} → 保存为 v{script.version + 1}
-          </span>
-          <span className="text-xs text-gray-300 dark:text-gray-600">|</span>
-          <span className="text-xs text-gray-400 dark:text-gray-500">⌘S 保存</span>
-        </div>
-      </div>
+      )}
 
       {/* 左侧搜索栏 */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
@@ -293,12 +298,12 @@ export default function DualPaneEditor({
       </div>
 
       {/* 底部操作栏 */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 rounded-b-xl">
+      <div className={`flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 flex-shrink-0 ${fullScreen ? "" : "rounded-b-xl"}`}>
         <div className="flex items-center gap-2">
           <button
             onClick={onCancel}
             disabled={saving}
-            className="rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-950 transition disabled:opacity-50"
+            className="rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition disabled:opacity-50"
           >
             ❌ 取消
           </button>

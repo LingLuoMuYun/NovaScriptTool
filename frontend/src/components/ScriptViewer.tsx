@@ -499,28 +499,50 @@ export default function ScriptViewer({ scene, characterNames = [], novelContent,
     }
   };
 
-  // 双栏编辑模式
+  // 双栏编辑模式 — 全屏覆盖
   if (isDualPane && script && novelContent) {
     return (
-      <div className="rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-gray-900 shadow-lg dark:shadow-gray-950/30 overflow-hidden ring-2 ring-indigo-100 dark:ring-indigo-900">
-        <DualPaneEditor
-          sceneId={scene.id}
-          sceneLabel={`Scene ${scene.sceneNum} — ${scene.location}`}
-          sceneMeta={{
-            sceneNum: scene.sceneNum,
-            location: scene.location,
-            timeOfDay: scene.timeOfDay,
-            isLocked: scene.isLocked,
-          }}
-          script={script}
-          novelContent={novelContent}
-          characterNames={characterNames}
-          onSaved={() => {
-            setIsDualPane(false);
-            onScriptUpdate?.();
-          }}
-          onCancel={() => setIsDualPane(false)}
-        />
+      <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-950">
+        {/* 顶部标题栏 */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-lg">📝</span>
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">
+              双栏编辑 — Scene {scene.sceneNum} — {scene.location}
+            </h3>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              📍 {scene.location} · ⏰ {scene.timeOfDay}
+            </span>
+          </div>
+          <button
+            onClick={() => setIsDualPane(false)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          >
+            ✕ 退出双栏编辑
+          </button>
+        </div>
+        {/* 编辑器主体：填满剩余空间 */}
+        <div className="flex-1 min-h-0">
+          <DualPaneEditor
+            fullScreen
+            sceneId={scene.id}
+            sceneLabel={`Scene ${scene.sceneNum} — ${scene.location}`}
+            sceneMeta={{
+              sceneNum: scene.sceneNum,
+              location: scene.location,
+              timeOfDay: scene.timeOfDay,
+              isLocked: scene.isLocked,
+            }}
+            script={script}
+            novelContent={novelContent}
+            characterNames={characterNames}
+            onSaved={() => {
+              setIsDualPane(false);
+              onScriptUpdate?.();
+            }}
+            onCancel={() => setIsDualPane(false)}
+          />
+        </div>
       </div>
     );
   }
