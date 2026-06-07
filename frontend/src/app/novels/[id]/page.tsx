@@ -10,6 +10,7 @@ import CharacterCard from "@/components/CharacterCard";
 import SceneList from "@/components/SceneList";
 import ScriptViewer from "@/components/ScriptViewer";
 import PipelineProgress from "@/components/PipelineProgress";
+import QueueStatusPanel from "@/components/QueueStatusPanel";
 import AnnotationPanel from "@/components/AnnotationPanel";
 import ImpactDialog from "@/components/ImpactDialog";
 import SceneEditor from "@/components/SceneEditor";
@@ -520,6 +521,11 @@ export default function NovelDetailPage() {
           />
         </div>
       )}
+
+      {/* 并发任务队列状态 */}
+      <div className="mb-6">
+        <QueueStatusPanel />
+      </div>
 
       {/* Tab 导航 */}
       <div className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-700">

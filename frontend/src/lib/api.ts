@@ -464,3 +464,189 @@ export function validateScripts(novelId: string): Promise<ValidationResult> {
   return request(`/api/novels/${novelId}/validate`);
 }
 
+// ─── 并发队列 API ──────────────────────────────────────────
+
+export interface QueueJob {
+  id: string;
+  novelId: string;
+  novelTitle: string;
+  type: "analyze" | "generate-scripts" | "pipeline" | "incremental-pipeline";
+  priority: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  createdAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+  progress: any | null;
+  error: string | null;
+  result: any | null;
+}
+
+export interface QueueStatus {
+  active: QueueJob[];
+  pending: QueueJob[];
+  maxConcurrency: number;
+  totalQueued: number;
+  totalCompleted: number;
+  totalFailed: number;
+  rateLimitRemaining: number;
+}
+
+export interface QueueSubmitResult {
+  jobId: string;
+  position: number;
+  status: string;
+  message: string;
+}
+
+/** 获取队列全局状态 */
+export function getQueueStatus(): Promise<QueueStatus> {
+  return request("/api/queue/status");
+}
+
+/** 获取特定任务状态 */
+export function getQueueJob(jobId: string): Promise<QueueJob> {
+  return request(`/api/queue/${jobId}`);
+}
+
+/** 取消排队中的任务 */
+export function cancelQueueJob(jobId: string): Promise<{ success: boolean }> {
+  return request(`/api/queue/${jobId}/cancel`, { method: "POST" });
+}
+
+/** 提交队列化一键流水线 */
+export function submitPipelineJob(novelId: string): Promise<QueueSubmitResult> {
+  return request(`/api/novels/${novelId}/pipeline/queue`, { method: "POST" });
+}
+
+/** 提交队列化增量重算 */
+export function submitIncrementalJob(
+  novelId: string,
+  sceneNums: number[]
+): Promise<QueueSubmitResult> {
+  return request(`/api/novels/${novelId}/incremental-pipeline/queue`, {
+    method: "POST",
+    body: JSON.stringify({ sceneNums }),
+  });
+}
+
+/**
+ * 订阅队列全局状态 SSE 流
+ * 返回 AbortController 用于取消订阅
+ */
+export function subscribeQueueStream(
+  onStatus: (status: QueueStatus) => void,
+  onError?: (err: string) => void
+): AbortController {
+  const controller = new AbortController();
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+  fetch(`${API_BASE}/api/queue/stream`, { signal: controller.signal })
+    .then(async (response) => {
+      if (!response.ok || !response.body) {
+        onError?.(`HTTP ${response.status}`);
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              onStatus(data);
+            } catch { /* malformed */ }
+          }
+        }
+      }
+    })
+    .catch((err) => {
+      if (err.name !== "AbortError") onError?.(err.message);
+    });
+
+  return controller;
+}
+
+/**
+ * 订阅特定任务进度 SSE 流
+ * 返回 AbortController 用于取消订阅
+ */
+export function subscribeJobStream(
+  jobId: string,
+  callbacks: {
+    onQueueUpdate?: (data: { status: string; position: number }) => void;
+    onProgress?: (progress: any) => void;
+    onCompleted?: (data: any) => void;
+    onFailed?: (data: { jobId: string; error: string }) => void;
+    onCancelled?: (data: { jobId: string }) => void;
+    onError?: (err: string) => void;
+  }
+): AbortController {
+  const controller = new AbortController();
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+  fetch(`${API_BASE}/api/queue/${jobId}/stream`, { signal: controller.signal })
+    .then(async (response) => {
+      if (!response.ok || !response.body) {
+        callbacks.onError?.(`HTTP ${response.status}`);
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let currentEvent = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              switch (currentEvent || data.type) {
+                case "queue_update":
+                  callbacks.onQueueUpdate?.(data);
+                  break;
+                case "progress":
+                  callbacks.onProgress?.(data);
+                  break;
+                case "completed":
+                  callbacks.onCompleted?.(data);
+                  break;
+                case "failed":
+                  callbacks.onFailed?.(data);
+                  break;
+                case "cancelled":
+                  callbacks.onCancelled?.(data);
+                  break;
+                default:
+                  // Infer from data shape
+                  if (data.stage) callbacks.onProgress?.(data);
+                  else if (data.status === "queued") callbacks.onQueueUpdate?.(data);
+                  else if (data.error) callbacks.onFailed?.(data);
+                  else if (data.result || data.jobId) callbacks.onCompleted?.(data);
+              }
+              currentEvent = "";
+            } catch { /* malformed */ }
+          } else if (line.trim() === "") {
+            currentEvent = "";
+          }
+        }
+      }
+    })
+    .catch((err) => {
+      if (err.name !== "AbortError") callbacks.onError?.(err.message);
+    });
+
+  return controller;
+}
+

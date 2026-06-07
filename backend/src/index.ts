@@ -5,6 +5,7 @@ import path from "path";
 import { PrismaClient } from "@prisma/client";
 import { mimoClient, deepseekClient, chatCompletion } from "./services/ai.service";
 import { cleanText, splitChapters, chunkByChars, analyzeText } from "./utils/text-processor";
+import { jobQueue } from "./services/job-queue.service";
 
 const prisma = new PrismaClient();
 const app = express();
@@ -1931,6 +1932,357 @@ app.post("/api/chat/stream", async (req, res) => {
     res.status(500).json({ error: err.message || "AI 请求失败" });
   }
 });
+
+// ─── 并发控制与任务队列 API ─────────────────────────────────
+
+/** 获取队列全局状态 */
+app.get("/api/queue/status", (_req, res) => {
+  const status = jobQueue.getStatus();
+  res.json(status);
+});
+
+/** 全局队列状态 SSE 流 — 前端可订阅实时队列变化 */
+app.get("/api/queue/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const unsubscribe = jobQueue.subscribeQueue((event, data) => {
+    res.write(`event: ${event}\ndata: ${data}\n\n`);
+  });
+
+  req.on("close", () => {
+    unsubscribe();
+  });
+});
+
+/** 订阅特定任务的进度 SSE 流 */
+app.get("/api/queue/:jobId/stream", (req, res) => {
+  const { jobId } = req.params;
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  // 检查任务是否存在
+  const job = jobQueue.getJob(jobId);
+  if (!job) {
+    res.write(`event: error\ndata: ${JSON.stringify({ message: "任务不存在或已过期" })}\n\n`);
+    return res.end();
+  }
+
+  // 如果任务已完成，直接推送结果
+  if (job.status === "completed") {
+    res.write(`event: completed\ndata: ${JSON.stringify({ jobId, result: "ok" })}\n\n`);
+    return res.end();
+  }
+  if (job.status === "failed") {
+    res.write(`event: failed\ndata: ${JSON.stringify({ jobId, error: job.error })}\n\n`);
+    return res.end();
+  }
+
+  const unsubscribe = jobQueue.subscribeJob(jobId, (event, data) => {
+    res.write(`event: ${event}\ndata: ${data}\n\n`);
+  });
+
+  req.on("close", () => {
+    unsubscribe();
+  });
+});
+
+/** 获取特定任务状态 */
+app.get("/api/queue/:jobId", (req, res) => {
+  const job = jobQueue.getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "任务不存在或已过期" });
+  res.json(job);
+});
+
+/** 取消排队中的任务 */
+app.post("/api/queue/:jobId/cancel", (req, res) => {
+  const success = jobQueue.cancelJob(req.params.jobId);
+  if (success) {
+    res.json({ success: true, message: "任务已取消" });
+  } else {
+    res.status(400).json({ success: false, error: "无法取消该任务（可能正在执行或不存在）" });
+  }
+});
+
+/** 更新队列配置（运行时调整并发数等） */
+app.put("/api/queue/config", (req, res) => {
+  const { maxConcurrency, rateLimitPerMinute } = req.body;
+  const config: any = {};
+  if (maxConcurrency != null) config.maxConcurrency = Math.max(1, Math.min(8, Number(maxConcurrency)));
+  if (rateLimitPerMinute != null) config.rateLimitPerMinute = Math.max(1, Math.min(60, Number(rateLimitPerMinute)));
+  jobQueue.updateConfig(config);
+  res.json({ success: true, config: jobQueue.getStatus() });
+});
+
+console.log("✅ 并发任务队列已初始化 (maxConcurrency=2, jobTimeout=10min, rateLimit=10/min)");
+
+// ─── 队列化流水线端点 ──────────────────────────────────────
+
+/**
+ * 队列化一键流水线 (Agent 1→2→3→4)
+ * POST /api/novels/:id/pipeline/queue
+ * 立即返回 jobId，前端通过 GET /api/queue/:jobId/stream 订阅进度
+ */
+app.post("/api/novels/:id/pipeline/queue", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({ where: { id: req.params.id } });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+    if (!novel.content || novel.content.trim().length < 50) {
+      return res.status(400).json({ error: "小说内容过短" });
+    }
+
+    const novelId = novel.id;
+    const novelTitle = novel.title;
+    const novelContent = novel.content;
+
+    // 提交到队列
+    const { jobId, position } = jobQueue.enqueue(
+      novelId,
+      novelTitle,
+      "pipeline",
+      async (onProgress) => {
+        const { runAnalysisPipeline, runScriptGenerationPipeline } = await import("./services/ai.service");
+
+        // Phase 1: 分析
+        await prisma.novel.update({ where: { id: novelId }, data: { status: "analyzing" } });
+        onProgress({ stage: "analyze", progress: 0, message: "🚀 启动分析流水线..." });
+
+        const analysisResult = await runAnalysisPipeline(novelContent, onProgress);
+
+        await prisma.novel.update({
+          where: { id: novelId },
+          data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
+        });
+
+        // 存储角色
+        await prisma.character.deleteMany({ where: { novelId } });
+        if (analysisResult.characters.length > 0) {
+          await prisma.character.createMany({
+            data: analysisResult.characters.map((c) => ({
+              novelId,
+              name: c.name,
+              aliases: JSON.stringify(c.aliases || []),
+              roleType: c.roleType || "配角",
+              traits: JSON.stringify(c.traits || {}),
+            })),
+          });
+        }
+
+        // Phase 2: 生成剧本
+        onProgress({ stage: "generate", progress: 50, message: "🎬 启动场景规划与剧本生成..." });
+        const scriptResult = await runScriptGenerationPipeline(
+          novelContent,
+          analysisResult.characters.map((c) => ({
+            name: c.name,
+            roleType: c.roleType,
+            traits: c.traits,
+          })),
+          onProgress
+        );
+
+        // 仅删除未锁定场景
+        const lockedScenes = await prisma.scene.findMany({
+          where: { novelId, isLocked: true },
+          select: { sceneNum: true },
+        });
+        const lockedNums = lockedScenes.map((s) => s.sceneNum);
+
+        await prisma.scene.deleteMany({
+          where: { novelId, isLocked: false },
+        });
+
+        let skippedLocked = 0;
+        for (const scene of scriptResult.scenes) {
+          if (lockedNums.includes(scene.sceneNum)) {
+            skippedLocked++;
+            continue;
+          }
+          const created = await prisma.scene.create({
+            data: { novelId, sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
+          });
+          const script = scriptResult.scripts.find((s) => s.sceneNum === scene.sceneNum);
+          if (script) {
+            const newScript = await prisma.script.create({
+              data: { sceneId: created.id, yamlContent: script.scriptYaml, createdBy: "system" },
+            });
+            await prisma.scene.update({
+              where: { id: created.id },
+              data: { currentVersionId: newScript.id },
+            });
+          }
+        }
+
+        await prisma.novel.update({ where: { id: novelId }, data: { status: "completed" } });
+
+        return {
+          plot: analysisResult.plot,
+          characters: analysisResult.characters,
+          scenes: scriptResult.scenes,
+          scripts: scriptResult.scripts,
+          stats: {
+            characters: analysisResult.characters.length,
+            scenes: scriptResult.scenes.length,
+            lockedSkipped: skippedLocked,
+          },
+        };
+      }
+    );
+
+    res.json({
+      jobId,
+      position,
+      status: "queued",
+      message: position === 0
+        ? "任务已开始执行"
+        : `任务已加入队列，前面还有 ${position - 1} 个任务`,
+    });
+  } catch (err: any) {
+    res.status(err.message.includes("队列已满") ? 503 : 500).json({ error: err.message });
+  }
+});
+
+/**
+ * 队列化增量重算
+ * POST /api/novels/:id/incremental-pipeline/queue
+ */
+app.post("/api/novels/:id/incremental-pipeline/queue", async (req, res) => {
+  try {
+    const { sceneNums } = req.body;
+    if (!sceneNums || !Array.isArray(sceneNums) || sceneNums.length === 0) {
+      return res.status(400).json({ error: "请提供需要重新生成的场景编号数组" });
+    }
+
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { characters: true },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    const novelId = novel.id;
+    const novelTitle = novel.title;
+
+    const { jobId, position } = jobQueue.enqueue(
+      novelId,
+      novelTitle,
+      "incremental-pipeline",
+      async (onProgress) => {
+        const { writeScriptWithRetry } = await import("./services/ai.service");
+
+        const targetScenes = await prisma.scene.findMany({
+          where: { novelId, sceneNum: { in: sceneNums }, isLocked: false },
+          orderBy: { sceneNum: "asc" },
+          include: { scripts: { orderBy: { version: "desc" }, take: 1 } },
+        });
+
+        const characters = novel.characters.map((c) => ({
+          name: c.name,
+          roleType: c.roleType,
+          traits: JSON.parse(c.traits || "{}"),
+        }));
+
+        const total = targetScenes.length;
+        let completed = 0;
+        const results: any[] = [];
+
+        for (const scene of targetScenes) {
+          onProgress({
+            stage: "scene_start",
+            current: completed,
+            total,
+            sceneNum: scene.sceneNum,
+            message: `✍️ 正在生成场景 ${scene.sceneNum}... (${completed + 1}/${total})`,
+          });
+
+          try {
+            const scriptContent = scene.scripts[0]?.yamlContent || "";
+            const sceneChars = characters.filter((c) => scriptContent.includes(c.name));
+            if (sceneChars.length === 0) {
+              const coreChars = characters.filter((c) => c.roleType === "主角" || c.roleType === "反派");
+              sceneChars.push(...coreChars.slice(0, 3));
+            }
+            const charsForAI = sceneChars.slice(0, 5);
+
+            const { scriptJson } = await writeScriptWithRetry(
+              { sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
+              charsForAI.length > 0 ? charsForAI : characters.slice(0, 2)
+            );
+
+            const latest = await prisma.script.findFirst({
+              where: { sceneId: scene.id },
+              orderBy: { version: "desc" },
+            });
+            const nextVersion = (latest?.version || 0) + 1;
+
+            const newScript = await prisma.script.create({
+              data: {
+                sceneId: scene.id,
+                yamlContent: scriptJson,
+                version: nextVersion,
+                createdBy: "system",
+                parentVersionId: latest?.id || null,
+              },
+            });
+
+            await prisma.scene.update({
+              where: { id: scene.id },
+              data: { currentVersionId: newScript.id },
+            });
+
+            completed++;
+            results.push({ sceneNum: scene.sceneNum, version: nextVersion });
+
+            onProgress({
+              stage: "scene_done",
+              current: completed,
+              total,
+              sceneNum: scene.sceneNum,
+              version: nextVersion,
+              message: `✅ 场景 ${scene.sceneNum} 完成 → v${nextVersion}`,
+            });
+          } catch (err: any) {
+            onProgress({
+              stage: "scene_error",
+              current: completed,
+              total,
+              sceneNum: scene.sceneNum,
+              message: `❌ 场景 ${scene.sceneNum} 失败: ${err.message}`,
+            });
+          }
+        }
+
+        onProgress({
+          stage: "done",
+          current: completed,
+          total,
+          message: `✅ 增量重算完成！更新了 ${completed} 个场景`,
+          detail: `成功 ${completed}/${total}`,
+        });
+
+        return { completed, total, results };
+      }
+    );
+
+    res.json({
+      jobId,
+      position,
+      status: "queued",
+      message: position === 0
+        ? "增量重算已开始执行"
+        : `增量重算已加入队列，前面还有 ${position - 1} 个任务`,
+    });
+  } catch (err: any) {
+    res.status(err.message.includes("队列已满") ? 503 : 500).json({ error: err.message });
+  }
+});
+
+// ─── 服务器启动 ─────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);

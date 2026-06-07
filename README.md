@@ -132,11 +132,15 @@ Agent 间传递结构化约束（角色列表、剧情大纲），避免单一 A
 
 基于 DeepSeek API 的对话式助手，嵌入小说详情页，支持 8 套编剧风格模板（古装/都市/悬疑/科幻/奇幻/历史/言情/通用），自动获取当前小说角色和原文上下文。
 
-### 7. 暗色模式
+### 7. 并发控制与任务队列
+
+内建内存级任务队列与令牌桶速率限制器，控制 AI 流水线最大并发数（默认 2），FIFO 调度 + 短文本优先，支持队列状态 SSE 实时推送、排队任务取消、超时自动回收，防止多用户/多任务场景下的 API 过载与服务器崩溃。
+
+### 8. 暗色模式
 
 基于 Tailwind `darkMode: 'class'` 策略的全局暗色模式，localStorage 持久化偏好，自动检测系统 `prefers-color-scheme`。
 
-### 8. 多格式导出
+### 9. 多格式导出
 
 支持导出为 YAML、Final Draft (.fdx)、Fountain 三种剧本格式，兼容专业编剧软件。
 
@@ -156,6 +160,7 @@ Agent 间传递结构化约束（角色列表、剧情大纲），避免单一 A
 | **剧本 Schema 校验** | Zod Schema 强校验 + 3 次自动重试 + 安全降级占位机制 |
 | **安全降级策略** | AI 内容审核拦截后自动缩短文本 + 关闭思维链重试的多级降级 |
 | **模板化 AI 聊天** | 8 套编剧风格模板，每套独立的 system prompt/temperature/角色偏好 |
+| **并发控制与任务队列** | 内存级 FIFO 任务队列 + 令牌桶速率限制器，可配置并发数，SSE 实时推送队列状态，排队任务可取消 |
 | **Electron 双进程管理** | 主进程管理 Express + Next.js 子进程生命周期，健康检查等待，数据库自动迁移 |
 
 ---
@@ -176,17 +181,19 @@ NovaScriptTool/
 │       │   ├── AnalysisDashboard.tsx# 分析仪表板
 │       │   ├── PipelineProgress.tsx # 流水线进度可视化
 │       │   ├── TemplateSelector.tsx # 项目模板选择器
+│       │   ├── QueueStatusPanel.tsx  # 并发队列状态面板
 │       │   └── ...                  # 其余 16 个组件
-│       └── lib/api.ts               # API 客户端
+│       └── lib/api.ts               # API 客户端 (含 SSE 队列订阅)
 ├── backend/                         # Express API Server
 │   ├── src/
-│   │   ├── index.ts                 # 全部路由 (50+ API 端点)
+│   │   ├── index.ts                 # 全部路由 (50+ API 端点 + 队列端点)
 │   │   ├── services/
 │   │   │   ├── ai.service.ts        # AI 客户端 + 4 Agent + 流水分线
 │   │   │   ├── chunked-pipeline.ts  # 分块分析流水线
 │   │   │   ├── dependency.service.ts# 依赖图谱 + BFS 影响分析
 │   │   │   ├── diff.service.ts      # 版本 Diff 引擎
-│   │   │   └── export.service.ts    # 多格式导出
+│   │   │   ├── export.service.ts    # 多格式导出
+│   │   │   └── job-queue.service.ts # 并发控制 + 令牌桶 + FIFO 队列
 │   │   ├── schemas/                 # Zod Schema 定义
 │   │   └── utils/text-processor.ts  # 文本预处理 + 章节分割
 │   └── prisma/schema.prisma         # 7 个数据模型

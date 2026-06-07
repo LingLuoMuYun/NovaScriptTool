@@ -373,10 +373,19 @@ export function parseAIJson(content: string): any {
 
 export interface PipelineProgress {
   stage: 'analyze' | 'characters' | 'scenes' | 'scripts' | 'save' | 'done' | 'error'
-    | 'chunking' | 'chunk_analyze' | 'merging';
-  progress: number;   // 0-100
+    | 'chunking' | 'chunk_analyze' | 'merging'
+    | 'generate' | 'scene_start' | 'scene_done' | 'scene_error';
+  progress?: number;   // 0-100 (incremental pipeline uses current/total instead)
   message: string;
   detail?: string;
+  /** 当前进度计数 (增量流水线用) */
+  current?: number;
+  /** 总任务数 (增量流水线用) */
+  total?: number;
+  /** 场景编号 (增量流水线用) */
+  sceneNum?: number;
+  /** 版本号 (增量流水线用) */
+  version?: number;
   stats?: {
     characters?: number;
     scenes?: number;
