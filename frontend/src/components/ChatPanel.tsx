@@ -16,6 +16,11 @@ interface ChatPanelProps {
   novelTitle?: string;
   novelCharacters?: { name: string; roleType: string }[];
   onClose?: () => void;
+  className?: string;
+  /** 外部控制的模板 ID，传入后自动同步内部模板选择 */
+  templateId?: string;
+  /** 嵌入模式：不显示关闭按钮，全高度 */
+  embedded?: boolean;
 }
 
 export default function ChatPanel({
@@ -23,6 +28,9 @@ export default function ChatPanel({
   novelTitle,
   novelCharacters = [],
   onClose,
+  className,
+  templateId: externalTemplateId,
+  embedded = false,
 }: ChatPanelProps) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -48,6 +56,13 @@ export default function ChatPanel({
       .then(setTemplates)
       .catch(() => {});
   }, []);
+
+  // 同步外部模板 ID
+  useEffect(() => {
+    if (externalTemplateId !== undefined) {
+      setSelectedTemplate(externalTemplateId);
+    }
+  }, [externalTemplateId]);
 
   // 加载会话列表
   const loadConversations = useCallback(async () => {
@@ -230,7 +245,7 @@ export default function ChatPanel({
   };
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-gray-900 rounded-xl shadow-xl overflow-hidden">
+    <div className={`flex h-full flex-col bg-white dark:bg-gray-900 overflow-hidden ${embedded ? "" : "rounded-xl shadow-xl"} ${className || ""}`}>
       {/* 头部 */}
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-3 shrink-0">
         <div className="flex items-center gap-2">
@@ -259,7 +274,7 @@ export default function ChatPanel({
           >
             ＋ 新对话
           </button>
-          {onClose && (
+          {onClose ? (
             <button
               onClick={onClose}
               className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -268,6 +283,8 @@ export default function ChatPanel({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          ) : (
+            <div /> // 嵌入模式占位保持布局
           )}
         </div>
       </div>
@@ -542,8 +559,7 @@ export default function ChatPanel({
               )}
             </div>
             <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-500 text-center">
-              Enter 发送 · Shift+Enter 换行 · Ctrl+Enter 快捷发送 · Esc
-              {onClose ? " 关闭面板" : streaming ? " 停止生成" : ""}
+              Enter 发送 · Shift+Enter 换行 · Ctrl+Enter 快捷发送{streaming ? " · Esc 停止生成" : ""}
             </p>
           </div>
         </div>
