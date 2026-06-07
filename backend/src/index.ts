@@ -613,9 +613,10 @@ app.get("/api/novels/:id/export", async (req, res) => {
     res.setHeader("Content-Type", contentType);
     const safeName = novel.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
     const formatLabel = format === "yaml" ? "剧本" : format === "fdx" ? "FinalDraft" : "Fountain";
+    const filename = `${safeName}_${formatLabel}${ext}`;
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}_${formatLabel}${ext}`
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
     );
     res.send(output);
   } catch (err: any) {

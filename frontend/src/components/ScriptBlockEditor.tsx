@@ -76,34 +76,9 @@ export default function ScriptBlockEditor({
 
   const script = parseScript(value);
 
-  // 解析失败时的降级：仍然显示原始 textarea
-  if (!script) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-300">
-          ⚠️ 无法解析剧本结构，使用纯文本编辑模式
-        </div>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1 resize-none border-0 px-4 py-3 font-mono text-sm leading-relaxed text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 focus:outline-none"
-          spellCheck={false}
-          readOnly={readOnly}
-        />
-      </div>
-    );
-  }
-
-  const emit = (data: ScriptData) => {
-    try {
-      onChange(serializeScript(data));
-      setError("");
-    } catch (e: any) {
-      setError(e.message || "序列化失败");
-    }
-  };
-
   // ─── 本地实时校验 ──────────────────────────────
+  // ⚠️ useMemo 必须在条件 return 之前调用，否则 hooks 数量不一致会触发
+  //    "Rendered more hooks than during the previous render" 错误
 
   const validation = useMemo(() => {
     if (!script) return null;
@@ -154,6 +129,33 @@ export default function ScriptBlockEditor({
     const warnings = issues.filter((i) => i.severity === "warning").length;
     return { errors, warnings, issues };
   }, [script]);
+
+  // 解析失败时的降级：仍然显示原始 textarea
+  if (!script) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-sm text-amber-700 dark:text-amber-300">
+          ⚠️ 无法解析剧本结构，使用纯文本编辑模式
+        </div>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 resize-none border-0 px-4 py-3 font-mono text-sm leading-relaxed text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 focus:outline-none"
+          spellCheck={false}
+          readOnly={readOnly}
+        />
+      </div>
+    );
+  }
+
+  const emit = (data: ScriptData) => {
+    try {
+      onChange(serializeScript(data));
+      setError("");
+    } catch (e: any) {
+      setError(e.message || "序列化失败");
+    }
+  };
 
   // ─── 场景元数据 ──────────────────────────────────
 
