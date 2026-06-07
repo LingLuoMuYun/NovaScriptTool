@@ -16,12 +16,12 @@ interface AnnotationPanelProps {
 
 const TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
   todo: { emoji: "📋", label: "待办", color: "border-l-orange-400 bg-orange-50" },
-  question: { emoji: "❓", label: "疑问", color: "border-l-blue-400 bg-blue-50" },
-  suggestion: { emoji: "💡", label: "建议", color: "border-l-emerald-400 bg-emerald-50" },
-  comment: { emoji: "💬", label: "评论", color: "border-l-indigo-400 bg-indigo-50" },
-  inspiration: { emoji: "✨", label: "灵感", color: "border-l-yellow-400 bg-yellow-50" },
-  warning: { emoji: "⚠️", label: "警示", color: "border-l-red-400 bg-red-50" },
-  note: { emoji: "📝", label: "笔记", color: "border-l-gray-300 bg-gray-50" },
+  question: { emoji: "❓", label: "疑问", color: "border-l-blue-400 bg-blue-50 dark:bg-blue-950" },
+  suggestion: { emoji: "💡", label: "建议", color: "border-l-emerald-400 bg-emerald-50 dark:bg-emerald-950" },
+  comment: { emoji: "💬", label: "评论", color: "border-l-indigo-400 bg-indigo-50 dark:bg-indigo-950" },
+  inspiration: { emoji: "✨", label: "灵感", color: "border-l-yellow-400 bg-yellow-50 dark:bg-yellow-950" },
+  warning: { emoji: "⚠️", label: "警示", color: "border-l-red-400 bg-red-50 dark:bg-red-950" },
+  note: { emoji: "📝", label: "笔记", color: "border-l-gray-300 bg-gray-50 dark:bg-gray-950" },
 };
 
 const TYPE_OPTIONS = Object.entries(TYPE_CONFIG).map(([value, cfg]) => ({
@@ -37,7 +37,7 @@ function renderContent(text: string) {
       return (
         <span
           key={i}
-          className="inline-flex items-center rounded bg-indigo-100 px-1 py-0 text-xs font-medium text-indigo-700"
+          className="inline-flex items-center rounded bg-indigo-100 dark:bg-indigo-900/40 px-1 py-0 text-xs font-medium text-indigo-700 dark:text-indigo-300"
         >
           {part}
         </span>
@@ -131,31 +131,31 @@ export default function AnnotationPanel({
   const unresolvedCount = annotations.filter((a) => !a.resolved).length;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-950/30">
       {/* 头部 */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-gray-700">
+      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-4 py-3">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
           💬 注记 ({annotations.length})
           {unresolvedCount > 0 && (
-            <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+            <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
               {unresolvedCount} 条未解决
             </span>
           )}
         </h3>
         {onClose && (
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-sm">
+          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:text-gray-300 dark:text-gray-600 text-sm">
             ✕
           </button>
         )}
       </div>
 
       {/* 筛选行 */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 dark:border-gray-800 px-3 py-2">
         {/* 类型筛选 */}
         <button
           onClick={() => setFilter("all")}
           className={`rounded px-2 py-0.5 text-xs transition ${
-            filter === "all" ? "bg-indigo-100 text-indigo-700" : "text-gray-500 hover:bg-gray-100"
+            filter === "all" ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-800"
           }`}
         >
           全部
@@ -165,7 +165,7 @@ export default function AnnotationPanel({
             key={key}
             onClick={() => setFilter(key)}
             className={`rounded px-2 py-0.5 text-xs transition ${
-              filter === key ? "bg-indigo-100 text-indigo-700" : "text-gray-500 hover:bg-gray-100"
+              filter === key ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-800"
             }`}
           >
             {cfg.emoji}
@@ -178,7 +178,7 @@ export default function AnnotationPanel({
         <button
           onClick={() => setViewMode("all")}
           className={`rounded px-2 py-0.5 text-xs transition ${
-            viewMode === "all" ? "bg-gray-200 text-gray-700" : "text-gray-500 hover:bg-gray-100"
+            viewMode === "all" ? "bg-gray-200 text-gray-700 dark:text-gray-200" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-800"
           }`}
         >
           全部
@@ -186,7 +186,7 @@ export default function AnnotationPanel({
         <button
           onClick={() => setViewMode("unresolved")}
           className={`rounded px-2 py-0.5 text-xs transition ${
-            viewMode === "unresolved" ? "bg-amber-100 text-amber-700" : "text-gray-500 hover:bg-gray-100"
+            viewMode === "unresolved" ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-800"
           }`}
         >
           ⚠️ 未解决
@@ -195,9 +195,9 @@ export default function AnnotationPanel({
 
       {/* 目标信息 */}
       {targetLabel && (
-        <div className="border-b border-gray-100 px-4 py-2">
-          <p className="text-xs text-gray-400">
-            关联: <span className="font-medium text-gray-600">{targetLabel}</span>
+        <div className="border-b border-gray-100 dark:border-gray-800 px-4 py-2">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            关联: <span className="font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600">{targetLabel}</span>
           </p>
         </div>
       )}
@@ -205,9 +205,9 @@ export default function AnnotationPanel({
       {/* 注记列表 */}
       <div className="max-h-[50vh] overflow-y-auto px-3 py-2">
         {loading ? (
-          <p className="py-4 text-center text-xs text-gray-400">加载中...</p>
+          <p className="py-4 text-center text-xs text-gray-400 dark:text-gray-500">加载中...</p>
         ) : filtered.length === 0 ? (
-          <p className="py-6 text-center text-xs text-gray-400">
+          <p className="py-6 text-center text-xs text-gray-400 dark:text-gray-500">
             {viewMode === "unresolved" ? "✅ 所有注记已解决" : "💭 暂无注记 — 点击剧本块左侧 💬 图标添加行内评论"}
           </p>
         ) : (
@@ -224,7 +224,7 @@ export default function AnnotationPanel({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-xs">{cfg.emoji}</span>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
                           {isBlockComment
                             ? "📍 行内评论"
                             : a.targetType === "scene"
@@ -234,15 +234,15 @@ export default function AnnotationPanel({
                             : "台词"}
                         </span>
                         {a.blockIndex != null && (
-                          <span className="text-xs text-gray-400 font-mono">
+                          <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">
                             Block #{a.blockIndex}
                           </span>
                         )}
-                        <span className="text-xs text-gray-300">
+                        <span className="text-xs text-gray-300 dark:text-gray-600">
                           {new Date(a.createdAt).toLocaleDateString("zh-CN")}
                         </span>
                         {a.authorName && (
-                          <span className="text-xs font-medium text-gray-500">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             — {a.authorName}
                           </span>
                         )}
@@ -260,8 +260,8 @@ export default function AnnotationPanel({
                         onClick={() => handleToggleResolved(a)}
                         className={`text-xs rounded px-1.5 py-0.5 transition ${
                           a.resolved
-                            ? "bg-green-100 text-green-600"
-                            : "bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600"
+                            ? "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400"
+                            : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:bg-green-100 dark:bg-green-900/40 hover:text-green-600 dark:text-green-400"
                         }`}
                         title={a.resolved ? "标记为未解决" : "标记为已解决"}
                       >
@@ -269,7 +269,7 @@ export default function AnnotationPanel({
                       </button>
                       <button
                         onClick={() => handleDelete(a.id)}
-                        className="text-xs rounded px-1.5 py-0.5 text-gray-400 hover:bg-red-100 hover:text-red-500 transition"
+                        className="text-xs rounded px-1.5 py-0.5 text-gray-400 dark:text-gray-500 hover:bg-red-100 dark:bg-red-900/40 hover:text-red-500 dark:text-red-400 transition"
                         title="删除"
                       >
                         🗑
@@ -285,19 +285,19 @@ export default function AnnotationPanel({
 
       {/* 新增注记 */}
       {!hideAddForm && (
-        <div className="border-t border-gray-100 px-3 py-3">
+        <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-3">
           <div className="flex items-center gap-2 mb-2">
             <input
               type="text"
               value={authorName}
               onChange={(e) => setAuthorName(e.target.value)}
               placeholder="署名"
-              className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600 w-20"
+              className="rounded border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600 w-20"
             />
             <select
               value={newType}
               onChange={(e) => setNewType(e.target.value)}
-              className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600"
+              className="rounded border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600"
             >
               {TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>

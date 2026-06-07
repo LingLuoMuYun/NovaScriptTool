@@ -29,8 +29,8 @@ export default function Home() {
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
       {/* 顶部标题 */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gray-900">🎬 NovaScriptTool</h1>
-        <p className="mt-2 text-gray-500">
+        <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">🎬 NovaScriptTool</h1>
+        <p className="mt-2 text-gray-500 dark:text-gray-400">
           AI 驱动的小说转剧本创作辅助系统
         </p>
       </div>
@@ -43,12 +43,12 @@ export default function Home() {
       {/* 小说列表 */}
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-700">
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">
             📚 我的小说 ({loading ? "..." : novels.length})
           </h2>
           <button
             onClick={fetchNovels}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 transition"
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-800 transition"
           >
             🔄 刷新
           </button>

@@ -72,7 +72,7 @@ function normalizeType(raw: string): string {
 export default function ConflictChart({ conflicts, knownCharacters }: ConflictChartProps) {
   if (!conflicts || conflicts.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-gray-400">暂无冲突数据</p>
+      <p className="py-4 text-center text-xs text-gray-400 dark:text-gray-500">暂无冲突数据</p>
     );
   }
 
@@ -109,10 +109,10 @@ export default function ConflictChart({ conflicts, knownCharacters }: ConflictCh
     <div className="mt-6 space-y-4">
       <div className="grid gap-6 lg:grid-cols-2">
         {/* 饼图：冲突类型分布 */}
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-          <h4 className="mb-3 text-sm font-medium text-gray-600">📊 冲突类型分布</h4>
+        <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
+          <h4 className="mb-3 text-sm font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600">📊 冲突类型分布</h4>
           {pieData.length === 0 ? (
-            <p className="py-8 text-center text-xs text-gray-400">无法分类</p>
+            <p className="py-8 text-center text-xs text-gray-400 dark:text-gray-500">无法分类</p>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
@@ -140,16 +140,16 @@ export default function ConflictChart({ conflicts, knownCharacters }: ConflictCh
               </PieChart>
             </ResponsiveContainer>
           )}
-          <p className="mt-1 text-center text-xs text-gray-400">
+          <p className="mt-1 text-center text-xs text-gray-400 dark:text-gray-500">
             AI 输出类型 → 关键词智能归类
           </p>
         </div>
 
         {/* 柱状图：角色冲突频次 */}
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-          <h4 className="mb-3 text-sm font-medium text-gray-600">👥 角色冲突频次 (Top 8)</h4>
+        <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
+          <h4 className="mb-3 text-sm font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600">👥 角色冲突频次 (Top 8)</h4>
           {barData.length === 0 ? (
-            <p className="py-8 text-center text-xs text-gray-400">
+            <p className="py-8 text-center text-xs text-gray-400 dark:text-gray-500">
               {knownCharacters && knownCharacters.length > 0
                 ? "冲突参与方不在已知角色列表中"
                 : "暂无数据"}
@@ -174,7 +174,7 @@ export default function ConflictChart({ conflicts, knownCharacters }: ConflictCh
             </ResponsiveContainer>
           )}
           {filteredCount > 0 && (
-            <p className="mt-1 text-center text-xs text-amber-500">
+            <p className="mt-1 text-center text-xs text-amber-500 dark:text-amber-400">
               ⚠️ 已过滤 {filteredCount} 个非角色实体（如"命运"等抽象概念）
             </p>
           )}

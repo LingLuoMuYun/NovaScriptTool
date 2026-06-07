@@ -306,11 +306,11 @@ export default function NovelDetailPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <svg className="mx-auto h-8 w-8 animate-spin text-indigo-500" viewBox="0 0 24 24">
+          <svg className="mx-auto h-8 w-8 animate-spin text-indigo-500 dark:text-indigo-400" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="mt-3 text-gray-400">加载中...</p>
+          <p className="mt-3 text-gray-400 dark:text-gray-500">加载中...</p>
         </div>
       </div>
     );
@@ -321,8 +321,8 @@ export default function NovelDetailPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <p className="text-4xl">⚠️</p>
-          <p className="mt-3 text-gray-700">加载小说失败</p>
-          <p className="mt-1 text-sm text-red-500">{fetchError}</p>
+          <p className="mt-3 text-gray-700 dark:text-gray-200">加载小说失败</p>
+          <p className="mt-1 text-sm text-red-500 dark:text-red-400">{fetchError}</p>
           <div className="mt-4 flex gap-3 justify-center">
             <button
               onClick={() => { setLoading(true); fetchNovel().finally(() => setLoading(false)); }}
@@ -330,7 +330,7 @@ export default function NovelDetailPage() {
             >
               🔄 重试
             </button>
-            <Link href="/" className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition">
+            <Link href="/" className="rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition">
               ← 返回首页
             </Link>
           </div>
@@ -344,9 +344,9 @@ export default function NovelDetailPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <p className="text-4xl">📭</p>
-          <p className="mt-2 text-gray-500">小说不存在</p>
-          <p className="mt-1 text-sm text-gray-400">该小说可能已被删除，或 ID 无效</p>
-          <Link href="/" className="mt-4 inline-block text-indigo-600 hover:underline">
+          <p className="mt-2 text-gray-500 dark:text-gray-400">小说不存在</p>
+          <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">该小说可能已被删除，或 ID 无效</p>
+          <Link href="/" className="mt-4 inline-block text-indigo-600 dark:text-indigo-400 hover:underline">
             ← 返回首页
           </Link>
         </div>
@@ -358,15 +358,15 @@ export default function NovelDetailPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <Link href="/" className="mb-6 inline-flex items-center text-sm text-gray-500 hover:text-indigo-600">
+      <Link href="/" className="mb-6 inline-flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:text-indigo-400">
         ← 返回列表
       </Link>
 
       {/* 标题 + 状态 */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{novel.title}</h1>
-          <p className="mt-1 text-sm text-gray-400">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{novel.title}</h1>
+          <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">
             {novel.content.length.toLocaleString()} 字 · 创建于{" "}
             {new Date(novel.createdAt).toLocaleDateString("zh-CN")}
           </p>
@@ -374,12 +374,12 @@ export default function NovelDetailPage() {
         <span
           className={`rounded-full px-3 py-1 text-sm font-medium ${
             novel.status === "draft"
-              ? "bg-gray-100 text-gray-500"
+              ? "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
               : novel.status === "analyzing"
-              ? "bg-yellow-100 text-yellow-700"
+              ? "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300"
               : novel.status === "analyzed"
               ? "bg-blue-100 text-blue-700"
-              : "bg-green-100 text-green-700"
+              : "bg-green-100 dark:bg-green-900/40 text-green-700"
           }`}
         >
           {novel.status === "draft" ? "📝 草稿"
@@ -395,7 +395,7 @@ export default function NovelDetailPage() {
         <button
           onClick={handlePipeline}
           disabled={pipelining}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-medium text-white shadow-sm dark:shadow-gray-950/30 transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pipelining ? (
             <>
@@ -418,7 +418,7 @@ export default function NovelDetailPage() {
           <button
             onClick={handleGenerateScripts}
             disabled={generating}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-medium text-white shadow-sm dark:shadow-gray-950/30 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {generating ? (
               <>
@@ -440,14 +440,14 @@ export default function NovelDetailPage() {
             <button
               onClick={handleBuildDeps}
               disabled={buildingDeps}
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-5 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm dark:shadow-gray-950/30 transition hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 disabled:opacity-50"
             >
               {buildingDeps ? "⏳ 分析中..." : "🔗 构建依赖图"}
             </button>
             <button
               onClick={handleIncrementalCheck}
               disabled={impactLoading}
-              className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-5 py-3 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950 px-5 py-3 text-sm font-medium text-indigo-700 dark:text-indigo-300 shadow-sm dark:shadow-gray-950/30 transition hover:bg-indigo-100 dark:bg-indigo-900/40 disabled:opacity-50"
             >
               {impactLoading ? "⏳ 分析中..." : "⚡ 增量重算"}
             </button>
@@ -459,7 +459,7 @@ export default function NovelDetailPage() {
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-800 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-gray-900"
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-800 px-6 py-3 text-sm font-medium text-white shadow-sm dark:shadow-gray-950/30 transition hover:bg-gray-900"
             >
               📥 导出剧本
               <svg className={`h-4 w-4 transition ${showExportMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -467,7 +467,7 @@ export default function NovelDetailPage() {
               </svg>
             </button>
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-gray-200 bg-white shadow-lg z-50 py-1">
+              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg z-50 py-1">
                 {[
                   { format: "yaml" as const, label: "YAML", icon: "📄", desc: "结构化 YAML，人类可读" },
                   { format: "fdx" as const, label: "Final Draft (.fdx)", icon: "🎬", desc: "导入 Final Draft 专业编剧软件" },
@@ -476,12 +476,12 @@ export default function NovelDetailPage() {
                   <button
                     key={opt.format}
                     onClick={() => handleExport(opt.format)}
-                    className="w-full px-4 py-2.5 text-left hover:bg-gray-50 transition flex items-start gap-3"
+                    className="w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition flex items-start gap-3"
                   >
                     <span className="text-lg mt-0.5">{opt.icon}</span>
                     <div>
-                      <p className="text-sm font-medium text-gray-700">{opt.label}</p>
-                      <p className="text-xs text-gray-400">{opt.desc}</p>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{opt.label}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{opt.desc}</p>
                     </div>
                   </button>
                 ))}
@@ -495,13 +495,13 @@ export default function NovelDetailPage() {
         )}
 
         {genError && (
-          <div className="w-full rounded-xl border border-red-200 bg-red-50 p-4">
+          <div className="w-full rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
             <p className="text-sm font-medium text-red-700">❌ 操作失败</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-red-600">{genError}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-red-600 dark:text-red-400">{genError}</p>
           </div>
         )}
         {pipelineStep && !genError && !pipelining && (
-          <p className="text-sm text-green-600">{pipelineStep}</p>
+          <p className="text-sm text-green-600 dark:text-green-400">{pipelineStep}</p>
         )}
       </div>
 
@@ -521,7 +521,7 @@ export default function NovelDetailPage() {
       )}
 
       {/* Tab 导航 */}
-      <div className="mb-6 flex gap-2 border-b border-gray-200">
+      <div className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-700">
         {[
           { key: "info", label: "📖 原文" },
           { key: "analysis", label: "📊 分析" },
@@ -534,8 +534,8 @@ export default function NovelDetailPage() {
             onClick={() => setActiveTab(tab.key as any)}
             className={`border-b-2 px-4 py-2 text-sm font-medium transition ${
               activeTab === tab.key
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 dark:text-gray-200"
             }`}
           >
             {tab.label}
@@ -545,11 +545,11 @@ export default function NovelDetailPage() {
 
       {/* Tab 内容 */}
       {activeTab === "info" && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-700">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-sm dark:shadow-gray-950/30">
+          <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-700 dark:text-gray-200">
             {novel.content.substring(0, 5000)}
             {novel.content.length > 5000 && (
-              <span className="mt-4 block text-center text-gray-400">
+              <span className="mt-4 block text-center text-gray-400 dark:text-gray-500">
                 ... 共 {novel.content.length.toLocaleString()} 字，仅展示前 5000 字
               </span>
             )}
@@ -588,7 +588,7 @@ export default function NovelDetailPage() {
       {activeTab === "scenes" && (
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <h3 className="mb-3 text-sm font-medium text-gray-500">场景列表</h3>
+            <h3 className="mb-3 text-sm font-medium text-gray-500 dark:text-gray-400">场景列表</h3>
             <SceneList
               scenes={scenes}
               onSelectScene={setSelectedScene}
@@ -600,7 +600,7 @@ export default function NovelDetailPage() {
             />
           </div>
           <div className="lg:col-span-3">
-            <h3 className="mb-3 text-sm font-medium text-gray-500">剧本内容</h3>
+            <h3 className="mb-3 text-sm font-medium text-gray-500 dark:text-gray-400">剧本内容</h3>
             {selectedScene ? (
               <ScriptViewer
                 scene={selectedScene}
@@ -608,9 +608,9 @@ export default function NovelDetailPage() {
                 onScriptUpdate={handleScriptUpdate}
               />
             ) : (
-              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center shadow-sm dark:shadow-gray-950/30">
                 <p className="text-4xl">👈</p>
-                <p className="mt-3 text-gray-400">选择一个场景查看剧本</p>
+                <p className="mt-3 text-gray-400 dark:text-gray-500">选择一个场景查看剧本</p>
               </div>
             )}
           </div>
@@ -679,10 +679,10 @@ export default function NovelDetailPage() {
 
 function EmptyTab({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center shadow-sm dark:shadow-gray-950/30">
       <p className="text-4xl">{emoji}</p>
-      <p className="mt-3 text-gray-500">{title}</p>
-      <p className="text-sm text-gray-400">{desc}</p>
+      <p className="mt-3 text-gray-500 dark:text-gray-400">{title}</p>
+      <p className="text-sm text-gray-400 dark:text-gray-500">{desc}</p>
     </div>
   );
 }

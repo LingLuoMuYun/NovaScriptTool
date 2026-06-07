@@ -59,8 +59,8 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
   }, [title]);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-4 text-lg font-semibold text-gray-800">📥 上传小说</h2>
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-sm dark:shadow-gray-950/30">
+      <h2 className="mb-4 text-lg font-semibold text-gray-800 dark:text-gray-100">📥 上传小说</h2>
 
       {/* 模式切换 */}
       <div className="mb-4 flex gap-2">
@@ -69,7 +69,7 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
           className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
             mode === "file"
               ? "bg-indigo-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-200"
           }`}
         >
           📁 文件上传
@@ -79,7 +79,7 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
           className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
             mode === "paste"
               ? "bg-indigo-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-200"
           }`}
         >
           ✍️ 直接粘贴
@@ -92,7 +92,7 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="小说标题（选填）"
-        className="mb-4 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="mb-4 w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
 
       {/* 文件上传区 */}
@@ -103,8 +103,8 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
           onDrop={handleDrop}
           className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition ${
             dragOver
-              ? "border-indigo-500 bg-indigo-50"
-              : "border-gray-300 hover:border-indigo-400"
+              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950"
+              : "border-gray-300 dark:border-gray-600 hover:border-indigo-400"
           }`}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -124,18 +124,18 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
           {file ? (
             <div className="text-center">
               <p className="text-lg">📄</p>
-              <p className="text-sm font-medium text-gray-700">{file.name}</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{file.name}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
                 {(file.size / 1024).toFixed(1)} KB
               </p>
             </div>
           ) : (
             <div className="text-center">
               <p className="text-2xl">📂</p>
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 拖拽文件到此处，或点击选择
               </p>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                 支持 .txt / .md / .json，最大 10MB
               </p>
             </div>
@@ -150,22 +150,22 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
           onChange={(e) => setContent(e.target.value)}
           placeholder="在此粘贴小说内容……"
           rows={10}
-          className="w-full resize-y rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="w-full resize-y rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
       )}
 
       {/* 错误提示 */}
       {error && (
-        <p className="mt-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
+        <p className="mt-3 rounded-lg bg-red-50 dark:bg-red-950 px-4 py-2 text-sm text-red-600 dark:text-red-400">
           ❌ {error}
         </p>
       )}
 
       {/* 上传统计 */}
       {uploadStats && (
-        <div className="mt-3 rounded-lg bg-emerald-50 px-4 py-2.5 border border-emerald-100 animate-fade-in">
-          <p className="text-sm font-medium text-emerald-700">✅ 上传成功</p>
-          <div className="mt-1 flex gap-3 text-xs text-emerald-600">
+        <div className="mt-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 px-4 py-2.5 border border-emerald-100 animate-fade-in">
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">✅ 上传成功</p>
+          <div className="mt-1 flex gap-3 text-xs text-emerald-600 dark:text-emerald-400">
             <span>📚 {uploadStats.chapters} 个章节</span>
             <span>📝 {uploadStats.chars.toLocaleString()} 字</span>
             {uploadStats.chars > 15000 && (

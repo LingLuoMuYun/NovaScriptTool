@@ -53,17 +53,17 @@ export default function PipelineProgress({
   if (!isRunning && stage !== "done" && stage !== "error") return null;
 
   return (
-    <div className="animate-fade-in rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div className="animate-fade-in rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-sm dark:shadow-gray-950/30">
       {/* 头部 */}
       <div className="mb-6 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {stage === "done" ? (
             <>✅ 处理完成</>
           ) : stage === "error" ? (
             <>❌ 处理失败</>
           ) : (
             <>
-              <svg className="h-5 w-5 animate-spin text-indigo-600" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 animate-spin text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -71,13 +71,13 @@ export default function PipelineProgress({
             </>
           )}
         </h3>
-        <span className="text-2xl font-bold text-indigo-600 tabular-nums">
+        <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
           {progress}%
         </span>
       </div>
 
       {/* 进度条 */}
-      <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
         <div
           className={`h-full rounded-full transition-all duration-700 ease-out ${
             stage === "error" ? "bg-red-500" : "bg-gradient-to-r from-indigo-500 to-purple-500"
@@ -100,8 +100,8 @@ export default function PipelineProgress({
                     : status === "active"
                     ? "scale-110 bg-indigo-600 text-white shadow-lg animate-pulse-glow"
                     : status === "error"
-                    ? "bg-red-100 text-red-400"
-                    : "bg-gray-100 text-gray-300"
+                    ? "bg-red-100 dark:bg-red-900/40 text-red-400"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600"
                 }`}
                 style={{
                   animationDelay: status === "active" ? "0s" : undefined,
@@ -120,16 +120,16 @@ export default function PipelineProgress({
               <p
                 className={`mt-2 text-center text-xs font-medium leading-tight transition-colors ${
                   status === "active"
-                    ? "text-indigo-600"
+                    ? "text-indigo-600 dark:text-indigo-400"
                     : status === "done"
-                    ? "text-green-600"
-                    : "text-gray-400"
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-gray-400 dark:text-gray-500"
                 }`}
               >
                 {step.label}
               </p>
               {step.agent && (
-                <p className="text-xs text-gray-300">{step.agent}</p>
+                <p className="text-xs text-gray-300 dark:text-gray-600">{step.agent}</p>
               )}
             </div>
           );
@@ -144,12 +144,12 @@ export default function PipelineProgress({
 
       {/* 实时消息 */}
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+        <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
           <p className="text-sm font-medium text-red-700">❌ 操作失败</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-red-600">{error}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-red-600 dark:text-red-400">{error}</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+        <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
           <div className="flex items-center gap-2">
             {isRunning && (
               <span className="flex h-2 w-2">
@@ -157,21 +157,21 @@ export default function PipelineProgress({
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
               </span>
             )}
-            <p className="text-sm font-medium text-gray-700">{message}</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{message}</p>
           </div>
           {detail && (
-            <p className="mt-1 text-xs text-gray-500">{detail}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{detail}</p>
           )}
 
           {/* 分块模式进度 */}
           {stats?.currentWindow && stats?.totalWindows && (
             <div className="mt-3">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-medium text-indigo-600">
+                <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
                   📖 分块分析 {stats.currentWindow}/{stats.totalWindows}
                 </span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-900/40">
                 <div
                   className="h-full rounded-full bg-indigo-500 transition-all duration-500"
                   style={{ width: `${Math.round((stats.currentWindow / stats.totalWindows) * 100)}%` }}
@@ -182,24 +182,24 @@ export default function PipelineProgress({
 
           {/* 统计信息 */}
           {stats && (stats.characters || stats.scenes || stats.totalChapters) && (
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
               {stats.totalChapters && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-3 py-1 text-teal-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 dark:bg-teal-950 px-3 py-1 text-teal-600 dark:text-teal-400">
                   📚 {stats.totalChapters} 个章节
                 </span>
               )}
               {stats.characters && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-indigo-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-950 px-3 py-1 text-indigo-600 dark:text-indigo-400">
                   👤 {stats.characters} 个角色
                 </span>
               )}
               {stats.scenes && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-purple-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 dark:bg-purple-950 px-3 py-1 text-purple-600 dark:text-purple-400">
                   🎬 {stats.scenes} 个场景
                 </span>
               )}
               {stats.currentScene && stats.totalScenes && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-amber-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950 px-3 py-1 text-amber-600">
                   ✍️ 场景 {stats.currentScene}/{stats.totalScenes}
                 </span>
               )}

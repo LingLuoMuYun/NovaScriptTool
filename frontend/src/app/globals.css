@@ -42,6 +42,10 @@
     scrollbar-color: #e5e7eb transparent;
   }
 
+  .dark .scrollbar-thin {
+    scrollbar-color: #374151 transparent;
+  }
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
   }
@@ -50,4 +54,13 @@
     background: #e5e7eb;
     border-radius: 2px;
   }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #374151;
+  }
+}
+
+/* 黑暗模式下的文本选择颜色 */
+.dark ::selection {
+  background-color: rgba(129, 140, 248, 0.25);
 }

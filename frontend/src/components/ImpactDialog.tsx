@@ -28,9 +28,9 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  causal_event: "bg-red-100 text-red-700",
+  causal_event: "bg-red-100 dark:bg-red-900/40 text-red-700",
   character_continuity: "bg-blue-100 text-blue-700",
-  temporal: "bg-gray-100 text-gray-600",
+  temporal: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 dark:text-gray-600",
 };
 
 export default function ImpactDialog({
@@ -48,19 +48,19 @@ export default function ImpactDialog({
 }: ImpactDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="mx-4 w-full max-w-lg animate-fade-in rounded-2xl border border-gray-200 bg-white p-6 shadow-xl max-h-[85vh] overflow-y-auto">
+      <div className="mx-4 w-full max-w-lg animate-fade-in rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-xl max-h-[85vh] overflow-y-auto">
         <div className="mb-4 flex items-center gap-3">
           <span className="text-2xl">⚡</span>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">增量重算确认</h3>
-            <p className="text-sm text-gray-500">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">增量重算确认</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               检测到变更，系统已计算影响范围
             </p>
           </div>
         </div>
 
         {/* 影响范围选择 */}
-        <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50 p-3">
+        <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50 dark:bg-purple-950 p-3">
           <p className="text-xs font-medium text-purple-700 mb-2">🎯 重算范围</p>
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -73,15 +73,15 @@ export default function ImpactDialog({
                 onClick={() => onMinWeightChange(opt.value)}
                 className={`rounded-xl border p-2.5 text-center transition ${
                   opt.active
-                    ? "border-purple-500 bg-white shadow-sm"
-                    : "border-purple-200 bg-purple-100/50 hover:bg-white"
+                    ? "border-purple-500 bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-950/30"
+                    : "border-purple-200 bg-purple-100/50 hover:bg-white dark:bg-gray-900"
                 }`}
               >
                 <span className="text-lg">{opt.icon}</span>
                 <p className={`text-xs font-semibold mt-0.5 ${opt.active ? "text-purple-700" : "text-purple-500"}`}>
                   {opt.label}
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{opt.desc}</p>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 leading-tight">{opt.desc}</p>
               </button>
             ))}
           </div>
@@ -97,7 +97,7 @@ export default function ImpactDialog({
 
         {/* 变更源 */}
         {changeSources && changeSources.length > 0 && (
-          <div className="mb-4 rounded-xl border border-green-100 bg-green-50 p-4">
+          <div className="mb-4 rounded-xl border border-green-100 bg-green-50 dark:bg-green-950 p-4">
             <p className="text-sm font-medium text-green-700">
               📝 检测到 {changeSources.length} 个变更源：
             </p>
@@ -105,7 +105,7 @@ export default function ImpactDialog({
               {changeSources.map((n) => (
                 <span
                   key={n}
-                  className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-600"
+                  className="rounded-full bg-green-100 dark:bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-600 dark:text-green-400"
                 >
                   场景 {n}
                 </span>
@@ -115,8 +115,8 @@ export default function ImpactDialog({
         )}
 
         {/* 受影响场景 + 依赖链路 */}
-        <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-          <p className="text-sm font-medium text-indigo-700">
+        <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 dark:bg-indigo-950 p-4">
+          <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
             将重新生成以下 {affectedSceneNums.length} 个场景：
           </p>
 
@@ -129,29 +129,29 @@ export default function ImpactDialog({
                 return (
                   <div
                     key={sceneNum}
-                    className="flex items-start gap-2 rounded-lg bg-white/70 px-3 py-2"
+                    className="flex items-start gap-2 rounded-lg bg-white dark:bg-gray-900/70 px-3 py-2"
                   >
-                    <span className="mt-0.5 text-xs font-bold text-indigo-600 shrink-0">
+                    <span className="mt-0.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
                       S{sceneNum}
                     </span>
                     <div className="flex-1 min-w-0">
                       {paths.map((p, i) => (
                         <div key={i} className="text-xs leading-relaxed">
-                          <span className="text-gray-400">← 场景 {p.sourceSceneNum}</span>
+                          <span className="text-gray-400 dark:text-gray-500">← 场景 {p.sourceSceneNum}</span>
                           <span
                             className={`ml-1.5 rounded px-1 py-px text-[10px] font-medium ${
-                              TYPE_COLORS[p.type] || "bg-gray-100 text-gray-600"
+                              TYPE_COLORS[p.type] || "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 dark:text-gray-600"
                             }`}
                           >
                             {TYPE_LABELS[p.type] || p.type}
                           </span>
-                          <span className="ml-1 text-[10px] text-gray-400">
+                          <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">
                             ({(p.weight * 100).toFixed(0)}%)
                           </span>
                         </div>
                       ))}
                       {paths.length === 0 && (
-                        <span className="text-xs text-gray-400">直接变更源</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">直接变更源</span>
                       )}
                     </div>
                   </div>
@@ -163,7 +163,7 @@ export default function ImpactDialog({
               {affectedSceneNums.map((n) => (
                 <span
                   key={n}
-                  className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-600"
+                  className="rounded-full bg-indigo-100 dark:bg-indigo-900/40 px-3 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400"
                 >
                   场景 {n}
                 </span>
@@ -173,15 +173,15 @@ export default function ImpactDialog({
         </div>
 
         {excludedLockedNums.length > 0 && (
-          <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
-            <p className="text-sm font-medium text-amber-700">
+          <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-950 p-4">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
               🔒 以下 {excludedLockedNums.length} 个锁定场景已自动排除：
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {excludedLockedNums.map((n) => (
                 <span
                   key={n}
-                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-600"
+                  className="rounded-full bg-amber-100 dark:bg-amber-900/40 px-3 py-1 text-xs font-medium text-amber-600"
                 >
                   场景 {n}
                 </span>
@@ -194,7 +194,7 @@ export default function ImpactDialog({
           <button
             onClick={onCancel}
             disabled={loading || recalculating}
-            className="rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition"
+            className="rounded-xl border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition"
           >
             取消
           </button>

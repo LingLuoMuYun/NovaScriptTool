@@ -18,18 +18,18 @@ export default function CharacterCard({ character }: CharacterCardProps) {
 
   const roleColor =
     character.roleType === "主角"
-      ? "bg-amber-100 text-amber-700"
+      ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
       : character.roleType === "反派"
-      ? "bg-red-100 text-red-700"
-      : "bg-gray-100 text-gray-600";
+      ? "bg-red-100 dark:bg-red-900/40 text-red-700"
+      : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 dark:text-gray-600";
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 shadow-sm dark:shadow-gray-950/30 transition hover:shadow-md">
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-800">{character.name}</h3>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">{character.name}</h3>
           {aliases.length > 0 && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-400 dark:text-gray-500">
               aka {aliases.join(", ")}
             </p>
           )}
@@ -41,19 +41,19 @@ export default function CharacterCard({ character }: CharacterCardProps) {
 
       {traits.identity && (
         <div className="mb-2">
-          <span className="text-xs text-gray-400">身份</span>
-          <p className="text-sm text-gray-700">{traits.identity}</p>
+          <span className="text-xs text-gray-400 dark:text-gray-500">身份</span>
+          <p className="text-sm text-gray-700 dark:text-gray-200">{traits.identity}</p>
         </div>
       )}
 
       {traits.personality && traits.personality.length > 0 && (
         <div className="mb-2">
-          <span className="text-xs text-gray-400">性格</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">性格</span>
           <div className="mt-1 flex flex-wrap gap-1">
             {traits.personality.map((tag: string, i: number) => (
               <span
                 key={i}
-                className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600"
+                className="rounded-full bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 text-xs text-indigo-600 dark:text-indigo-400"
               >
                 {tag}
               </span>
@@ -64,24 +64,24 @@ export default function CharacterCard({ character }: CharacterCardProps) {
 
       {traits.goal && (
         <div className="mb-2">
-          <span className="text-xs text-gray-400">目标</span>
-          <p className="text-sm text-gray-700">{traits.goal}</p>
+          <span className="text-xs text-gray-400 dark:text-gray-500">目标</span>
+          <p className="text-sm text-gray-700 dark:text-gray-200">{traits.goal}</p>
         </div>
       )}
 
       {traits.motivation && (
         <div className="mb-2">
-          <span className="text-xs text-gray-400">动机</span>
-          <p className="text-sm text-gray-700">{traits.motivation}</p>
+          <span className="text-xs text-gray-400 dark:text-gray-500">动机</span>
+          <p className="text-sm text-gray-700 dark:text-gray-200">{traits.motivation}</p>
         </div>
       )}
 
       {traits.relationships && traits.relationships.length > 0 && (
         <div>
-          <span className="text-xs text-gray-400">关系</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">关系</span>
           <div className="mt-1 space-y-1">
             {traits.relationships.map((rel: any, i: number) => (
-              <p key={i} className="text-sm text-gray-600">
+              <p key={i} className="text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600">
                 → <span className="font-medium">{rel.with}</span>: {rel.relation}
               </p>
             ))}

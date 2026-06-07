@@ -427,12 +427,12 @@ export default function CharacterNetworkGraph({
 
   if (!hasRelationships) {
     return (
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+      <div className="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center shadow-sm dark:shadow-gray-950/30">
         <p className="text-4xl">🕸️</p>
-        <p className="mt-3 text-sm font-medium text-gray-500">
+        <p className="mt-3 text-sm font-medium text-gray-500 dark:text-gray-400">
           暂无角色关系数据
         </p>
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
           AI 分析后自动提取角色关系，在此展示交互式关系图谱
         </p>
       </div>
@@ -454,7 +454,7 @@ export default function CharacterNetworkGraph({
     <div className="mt-6 space-y-3">
       {/* 标题栏 + 筛选器 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h4 className="text-sm font-medium text-gray-600">
+        <h4 className="text-sm font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600">
           🕸️ 角色关系网络 ({nodes.length} 个角色, {links.length} 条关系)
         </h4>
         <div className="flex flex-wrap gap-1.5">
@@ -464,8 +464,8 @@ export default function CharacterNetworkGraph({
               onClick={() => toggleFilter(role)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                 activeFilters.has(role)
-                  ? "border-transparent text-white shadow-sm"
-                  : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
+                  ? "border-transparent text-white shadow-sm dark:shadow-gray-950/30"
+                  : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:text-gray-300 dark:text-gray-600"
               }`}
               style={
                 activeFilters.has(role)
@@ -480,16 +480,16 @@ export default function CharacterNetworkGraph({
       </div>
 
       {/* 关系图谱画布 */}
-      <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-sm">
+      <div className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 shadow-sm dark:shadow-gray-950/30">
         {/* 悬停提示浮层 */}
         {hoveredNode && (
-          <div className="absolute left-3 top-3 z-10 max-w-[220px] rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+          <div className="absolute left-3 top-3 z-10 max-w-[220px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 shadow-lg">
             <div className="flex items-center gap-2">
               <span
                 className="inline-block h-3 w-3 rounded-full"
                 style={{ backgroundColor: hoveredNode.color }}
               />
-              <span className="text-sm font-semibold text-gray-800">
+              <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                 {hoveredNode.name}
               </span>
               <span
@@ -500,7 +500,7 @@ export default function CharacterNetworkGraph({
               </span>
             </div>
             {hoveredNode.traits?.identity && (
-              <p className="mt-1.5 text-xs text-gray-500">
+              <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                 {hoveredNode.traits.identity}
               </p>
             )}
@@ -511,7 +511,7 @@ export default function CharacterNetworkGraph({
                     (tag: string, i: number) => (
                       <span
                         key={i}
-                        className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-600"
+                        className="rounded-full bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 text-xs text-indigo-600 dark:text-indigo-400"
                       >
                         {tag}
                       </span>
@@ -591,8 +591,8 @@ export default function CharacterNetworkGraph({
       </div>
 
       {/* 图例 */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-gray-400">
-        <span className="font-medium text-gray-500">角色类型:</span>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-gray-400 dark:text-gray-500">
+        <span className="font-medium text-gray-500 dark:text-gray-400">角色类型:</span>
         {Object.entries(ROLE_COLORS).map(([role, color]) => (
           <span key={role} className="inline-flex items-center gap-1">
             <span
@@ -603,7 +603,7 @@ export default function CharacterNetworkGraph({
           </span>
         ))}
         <span className="mx-2 text-gray-200">|</span>
-        <span className="font-medium text-gray-500">关系类型:</span>
+        <span className="font-medium text-gray-500 dark:text-gray-400">关系类型:</span>
         {Object.values(RELATION_TYPES).map((rel) => (
           <span key={rel.label} className="inline-flex items-center gap-1">
             <span
@@ -614,7 +614,7 @@ export default function CharacterNetworkGraph({
           </span>
         ))}
         <span className="mx-2 text-gray-200">|</span>
-        <span className="text-gray-400">
+        <span className="text-gray-400 dark:text-gray-500">
           💡 拖拽节点 · 滚轮缩放 · 点击高亮邻域 · 再次点击取消
         </span>
       </div>

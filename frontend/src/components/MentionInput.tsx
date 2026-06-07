@@ -127,13 +127,13 @@ export default function MentionInput({
         placeholder={placeholder}
         rows={rows}
         autoFocus={autoFocus}
-        className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 transition"
+        className="w-full resize-none rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 transition"
       />
 
       {/* @提及 建议下拉 */}
       {showMentions && filteredCharacters.length > 0 && (
-        <div className="absolute left-0 z-50 mt-1 w-56 rounded-lg border border-gray-200 bg-white shadow-lg max-h-40 overflow-y-auto">
-          <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-100">
+        <div className="absolute left-0 z-50 mt-1 w-56 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-40 overflow-y-auto">
+          <div className="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
             提及角色
           </div>
           {filteredCharacters.map((name, i) => (
@@ -142,10 +142,10 @@ export default function MentionInput({
               onClick={() => insertMention(name)}
               onMouseEnter={() => setMentionIdx(i)}
               className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition ${
-                i === mentionIdx ? "bg-indigo-50 text-indigo-700" : "text-gray-700 hover:bg-gray-50"
+                i === mentionIdx ? "bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300" : "text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950"
               }`}
             >
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs flex items-center justify-center font-medium">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs flex items-center justify-center font-medium">
                 {name[0]}
               </span>
               <span>{name}</span>
@@ -161,7 +161,7 @@ export default function MentionInput({
             <button
               onClick={onCancel}
               disabled={submitting}
-              className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition disabled:opacity-50"
             >
               取消
             </button>

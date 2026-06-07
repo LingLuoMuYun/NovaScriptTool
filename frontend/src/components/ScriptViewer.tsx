@@ -54,7 +54,7 @@ function StructuredScriptView({
   // 旧格式：纯文本展示
   if (!parsed || !parsed.content) {
     return (
-      <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-700">
+      <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-700 dark:text-gray-200">
         {content}
       </pre>
     );
@@ -71,21 +71,21 @@ function StructuredScriptView({
   }
 
   const blockStyles: Record<string, string> = {
-    action: "text-gray-700 text-sm leading-relaxed mb-3",
+    action: "text-gray-700 dark:text-gray-200 text-sm leading-relaxed mb-3",
     dialogue: "mb-4 pl-8 border-l-4 border-indigo-200",
-    transition: "text-gray-500 text-xs font-semibold tracking-wider uppercase text-right mb-4",
+    transition: "text-gray-500 dark:text-gray-400 text-xs font-semibold tracking-wider uppercase text-right mb-4",
   };
 
   return (
     <div className="space-y-1">
       {/* 场景信息栏 */}
       {parsed.charactersInScene && parsed.charactersInScene.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2">
-          <span className="text-xs font-medium text-indigo-500">👥 出场角色：</span>
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 dark:bg-indigo-950 px-3 py-2">
+          <span className="text-xs font-medium text-indigo-500 dark:text-indigo-400">👥 出场角色：</span>
           {parsed.charactersInScene.map((name, i) => (
             <span
               key={i}
-              className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700"
+              className="rounded-full bg-indigo-100 dark:bg-indigo-900/40 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300"
             >
               {name}
             </span>
@@ -106,8 +106,8 @@ function StructuredScriptView({
             <div
               className={`relative rounded-lg transition-colors ${
                 hasComments
-                  ? "bg-yellow-50 ring-1 ring-yellow-200 -mx-1 px-1"
-                  : "hover:bg-gray-50/50 -mx-1 px-1"
+                  ? "bg-yellow-50 dark:bg-yellow-950 ring-1 ring-yellow-200 -mx-1 px-1"
+                  : "hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950/50 -mx-1 px-1"
               }`}
             >
               {/* 行内评论按钮 — hover 显示 */}
@@ -118,8 +118,8 @@ function StructuredScriptView({
                 }}
                 className={`absolute -left-9 top-0 hidden h-6 w-6 items-center justify-center rounded-full text-xs leading-none transition group-hover:flex ${
                   hasComments
-                    ? "flex bg-yellow-400 text-white shadow-sm"
-                    : "bg-gray-200 text-gray-500 hover:bg-indigo-100 hover:text-indigo-600"
+                    ? "flex bg-yellow-400 text-white shadow-sm dark:shadow-gray-950/30"
+                    : "bg-gray-200 text-gray-500 dark:text-gray-400 hover:bg-indigo-100 dark:bg-indigo-900/40 hover:text-indigo-600 dark:text-indigo-400"
                 }`}
                 title={hasComments ? `${blockComments.length} 条评论` : "添加评论"}
               >
@@ -130,7 +130,7 @@ function StructuredScriptView({
               {hasComments && (
                 <span
                   onClick={() => setActiveBlockIdx(isActive ? null : i)}
-                  className="absolute -right-2 -top-2 flex h-5 min-w-[20px] cursor-pointer items-center justify-center rounded-full bg-yellow-500 px-1 text-xs font-bold text-white shadow-sm transition hover:bg-yellow-600"
+                  className="absolute -right-2 -top-2 flex h-5 min-w-[20px] cursor-pointer items-center justify-center rounded-full bg-yellow-500 px-1 text-xs font-bold text-white shadow-sm dark:shadow-gray-950/30 transition hover:bg-yellow-600"
                   title={`${blockComments.length} 条评论 (${unresolvedCount} 条未解决)`}
                 >
                   {blockComments.length}
@@ -145,14 +145,14 @@ function StructuredScriptView({
               {block.type === "dialogue" && (
                 <div className={blockStyles.dialogue}>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+                    <span className="text-sm font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
                       {block.character}
                     </span>
                     {block.emotion && (
-                      <span className="text-xs text-gray-500 italic">({block.emotion})</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 italic">({block.emotion})</span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-800 leading-relaxed">{block.line}</p>
+                  <p className="text-sm text-gray-800 dark:text-gray-100 leading-relaxed">{block.line}</p>
                 </div>
               )}
 
@@ -163,7 +163,7 @@ function StructuredScriptView({
 
             {/* 行内评论输入 */}
             {commentingIdx === i && (
-              <div className="mt-2 ml-4 pl-4 border-l-2 border-indigo-300 animate-fade-in">
+              <div className="mt-2 ml-4 pl-4 border-l-2 border-indigo-300 dark:border-indigo-700 animate-fade-in">
                 <InlineCommentForm
                   characters={characters}
                   onSubmit={async (text, type, author) => {
@@ -193,12 +193,12 @@ function StructuredScriptView({
       })}
 
       {/* 格式标签 */}
-      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
           ✅ 结构化剧本 · {parsed.content.length} 个内容块
         </span>
         {annotations.length > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 dark:bg-yellow-950 px-2.5 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
             💬 {annotations.length} 条行内评论
           </span>
         )}
@@ -234,13 +234,13 @@ function InlineCommentForm({
   };
 
   return (
-    <div className="rounded-lg border border-indigo-200 bg-white p-3 shadow-sm">
+    <div className="rounded-lg border border-indigo-200 bg-white dark:bg-gray-900 p-3 shadow-sm dark:shadow-gray-950/30">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-medium text-gray-500">✏️ 添加评论</span>
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">✏️ 添加评论</span>
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-500"
+          className="rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 text-xs text-gray-500 dark:text-gray-400"
         >
           <option value="comment">💬 评论</option>
           <option value="todo">📋 待办</option>
@@ -252,7 +252,7 @@ function InlineCommentForm({
           value={authorName}
           onChange={(e) => setAuthorName(e.target.value)}
           placeholder="署名"
-          className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-500 w-16"
+          className="rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 text-xs text-gray-500 dark:text-gray-400 w-16"
         />
       </div>
       <MentionInput
@@ -282,13 +282,13 @@ function CommentBubble({
   onDelete: () => void;
 }) {
   const TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
-    comment: { emoji: "💬", label: "评论", color: "border-l-blue-400 bg-blue-50" },
+    comment: { emoji: "💬", label: "评论", color: "border-l-blue-400 bg-blue-50 dark:bg-blue-950" },
     todo: { emoji: "📋", label: "待办", color: "border-l-orange-400 bg-orange-50" },
-    question: { emoji: "❓", label: "疑问", color: "border-l-amber-400 bg-amber-50" },
-    suggestion: { emoji: "💡", label: "建议", color: "border-l-emerald-400 bg-emerald-50" },
-    note: { emoji: "📝", label: "笔记", color: "border-l-gray-300 bg-gray-50" },
-    inspiration: { emoji: "✨", label: "灵感", color: "border-l-yellow-400 bg-yellow-50" },
-    warning: { emoji: "⚠️", label: "警示", color: "border-l-red-400 bg-red-50" },
+    question: { emoji: "❓", label: "疑问", color: "border-l-amber-400 bg-amber-50 dark:bg-amber-950" },
+    suggestion: { emoji: "💡", label: "建议", color: "border-l-emerald-400 bg-emerald-50 dark:bg-emerald-950" },
+    note: { emoji: "📝", label: "笔记", color: "border-l-gray-300 bg-gray-50 dark:bg-gray-950" },
+    inspiration: { emoji: "✨", label: "灵感", color: "border-l-yellow-400 bg-yellow-50 dark:bg-yellow-950" },
+    warning: { emoji: "⚠️", label: "警示", color: "border-l-red-400 bg-red-50 dark:bg-red-950" },
   };
   const cfg = TYPE_CONFIG[comment.type] || TYPE_CONFIG.comment;
 
@@ -298,7 +298,7 @@ function CommentBubble({
     return parts.map((part, i) => {
       if (part.startsWith("@")) {
         return (
-          <span key={i} className="inline-flex items-center gap-0.5 rounded bg-indigo-100 px-1 py-0 text-xs font-medium text-indigo-700">
+          <span key={i} className="inline-flex items-center gap-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 px-1 py-0 text-xs font-medium text-indigo-700 dark:text-indigo-300">
             {part}
           </span>
         );
@@ -318,21 +318,21 @@ function CommentBubble({
         <div className="flex-1 min-w-0">
           {/* 头部：署名 + 时间 */}
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-gray-600">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600">
               {comment.authorName || "匿名"}
             </span>
-            <span className="text-xs text-gray-300">·</span>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
               {new Date(comment.createdAt).toLocaleDateString("zh-CN")}{" "}
               {new Date(comment.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
             </span>
             {comment.resolved && (
-              <span className="text-xs text-green-500 font-medium ml-auto">✅ 已解决</span>
+              <span className="text-xs text-green-500 dark:text-green-400 font-medium ml-auto">✅ 已解决</span>
             )}
           </div>
 
           {/* 评论内容 */}
-          <p className={`text-sm leading-relaxed ${comment.resolved ? "line-through text-gray-400" : "text-gray-700"}`}>
+          <p className={`text-sm leading-relaxed ${comment.resolved ? "line-through text-gray-400 dark:text-gray-500" : "text-gray-700 dark:text-gray-200"}`}>
             {renderContent(comment.content)}
           </p>
         </div>
@@ -343,8 +343,8 @@ function CommentBubble({
             onClick={onToggleResolved}
             className={`text-xs rounded px-1.5 py-0.5 transition ${
               comment.resolved
-                ? "bg-green-100 text-green-600 hover:bg-green-200"
-                : "bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600"
+                ? "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 hover:bg-green-200"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:bg-green-100 dark:bg-green-900/40 hover:text-green-600 dark:text-green-400"
             }`}
             title={comment.resolved ? "标记为未解决" : "标记为已解决"}
           >
@@ -352,7 +352,7 @@ function CommentBubble({
           </button>
           <button
             onClick={onDelete}
-            className="text-xs rounded px-1.5 py-0.5 text-gray-400 hover:bg-red-100 hover:text-red-500 transition"
+            className="text-xs rounded px-1.5 py-0.5 text-gray-400 dark:text-gray-500 hover:bg-red-100 dark:bg-red-900/40 hover:text-red-500 dark:text-red-400 transition"
             title="删除"
           >
             🗑
@@ -496,19 +496,19 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
   // 无剧本 + 编辑模式：显示空白编辑器
   if (!script && isEditing) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-100 bg-gray-50 px-6 py-4">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-950/30">
+        <div className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 Scene {scene.sceneNum} — {scene.location}
               </h3>
-              <p className="text-sm text-gray-400">✏️ 手动编写剧本</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">✏️ 手动编写剧本</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowVersions(true)}
-                className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-indigo-100 hover:text-indigo-600 transition"
+                className="rounded-full bg-gray-100 dark:bg-gray-800 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-indigo-100 dark:bg-indigo-900/40 hover:text-indigo-600 dark:text-indigo-400 transition"
               >
                 📜 版本历史
               </button>
@@ -520,17 +520,17 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             rows={16}
-            className="w-full resize-y rounded-lg border border-gray-300 px-4 py-3 font-mono text-sm leading-relaxed focus:border-indigo-400 focus:outline-none transition"
+            className="w-full resize-y rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 font-mono text-sm leading-relaxed focus:border-indigo-400 focus:outline-none transition"
             placeholder={`dialogue:\n  - character: "主角"\n    line: "..."\n\naction:\n  - "场景描述..."`}
           />
           {editError && (
-            <p className="mt-2 text-sm text-red-500">{editError}</p>
+            <p className="mt-2 text-sm text-red-500 dark:text-red-400">{editError}</p>
           )}
           <div className="mt-3 flex gap-3 justify-end">
             <button
               onClick={() => { setIsEditing(false); setEditContent(""); }}
               disabled={saving}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              className="rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition disabled:opacity-50"
             >
               取消
             </button>
@@ -543,11 +543,11 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
             </button>
           </div>
         </div>
-        <div className="border-t border-gray-100 bg-gray-50 px-6 py-3">
-          <div className="flex gap-4 text-xs text-gray-400">
+        <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-6 py-3">
+          <div className="flex gap-4 text-xs text-gray-400 dark:text-gray-500">
             <span>📍 {scene.location}</span>
             <span>⏰ {scene.timeOfDay}</span>
-            {scene.isLocked && <span className="text-amber-500">🔒 已锁定</span>}
+            {scene.isLocked && <span className="text-amber-500 dark:text-amber-400">🔒 已锁定</span>}
           </div>
         </div>
       </div>
@@ -557,9 +557,9 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
   // 无剧本状态
   if (!script) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center shadow-sm dark:shadow-gray-950/30">
         <p className="text-4xl">📝</p>
-        <p className="mt-3 text-gray-500">该场景尚未生成剧本</p>
+        <p className="mt-3 text-gray-500 dark:text-gray-400">该场景尚未生成剧本</p>
         <button
           onClick={handleStartEdit}
           className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition"
@@ -573,19 +573,19 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
   // 编辑模式
   if (isEditing) {
     return (
-      <div className="rounded-xl border border-indigo-300 bg-white shadow-sm ring-2 ring-indigo-100">
-        <div className="border-b border-indigo-100 bg-indigo-50 px-6 py-4">
+      <div className="rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-950/30 ring-2 ring-indigo-100">
+        <div className="border-b border-indigo-100 bg-indigo-50 dark:bg-indigo-950 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 Scene {scene.sceneNum} — {scene.location}
               </h3>
-              <p className="text-sm text-indigo-500">✏️ 编辑模式 — 保存后将创建新版本</p>
+              <p className="text-sm text-indigo-500 dark:text-indigo-400">✏️ 编辑模式 — 保存后将创建新版本</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowVersions(true)}
-                className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-indigo-100 hover:text-indigo-600 transition"
+                className="rounded-full bg-white dark:bg-gray-900 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-indigo-100 dark:bg-indigo-900/40 hover:text-indigo-600 dark:text-indigo-400 transition"
               >
                 📜 版本历史
               </button>
@@ -597,21 +597,21 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             rows={20}
-            className="w-full resize-y rounded-lg border border-gray-300 px-4 py-3 font-mono text-sm leading-relaxed text-gray-700 focus:border-indigo-400 focus:outline-none transition"
+            className="w-full resize-y rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 font-mono text-sm leading-relaxed text-gray-700 dark:text-gray-200 focus:border-indigo-400 focus:outline-none transition"
             spellCheck={false}
           />
           {editError && (
-            <p className="mt-2 text-sm text-red-500">{editError}</p>
+            <p className="mt-2 text-sm text-red-500 dark:text-red-400">{editError}</p>
           )}
           <div className="mt-3 flex items-center justify-between">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-400 dark:text-gray-500">
               当前版本: v{script.version} — 保存后将创建 v{script.version + 1}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={handleCancelEdit}
                 disabled={saving}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                className="rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition disabled:opacity-50"
               >
                 ❌ 取消
               </button>
@@ -625,11 +625,11 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
             </div>
           </div>
         </div>
-        <div className="border-t border-gray-100 bg-gray-50 px-6 py-3">
-          <div className="flex gap-4 text-xs text-gray-400">
+        <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-6 py-3">
+          <div className="flex gap-4 text-xs text-gray-400 dark:text-gray-500">
             <span>📍 {scene.location}</span>
             <span>⏰ {scene.timeOfDay}</span>
-            {scene.isLocked && <span className="text-amber-500">🔒 已锁定</span>}
+            {scene.isLocked && <span className="text-amber-500 dark:text-amber-400">🔒 已锁定</span>}
           </div>
         </div>
       </div>
@@ -638,15 +638,15 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
 
   // 正常只读模式 — 含行内评论
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-950/30">
       {/* 场景标题 */}
-      <div className="border-b border-gray-100 bg-gray-50 px-6 py-4">
+      <div className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-gray-800">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
               Scene {scene.sceneNum} — {scene.location}
             </h3>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-gray-400 dark:text-gray-500">
               第 {script.version} 版 ·{" "}
               {script.createdBy === "user" ? "👤 手动编辑" : "🤖 AI 生成"} ·{" "}
               {new Date(script.createdAt).toLocaleDateString("zh-CN")}
@@ -655,17 +655,17 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
           <div className="flex items-center gap-2">
             <button
               onClick={handleStartEdit}
-              className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-200 transition"
+              className="rounded-full bg-indigo-100 dark:bg-indigo-900/40 px-3 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 transition"
             >
               ✏️ 编辑
             </button>
             <button
               onClick={() => setShowVersions(true)}
-              className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-indigo-100 hover:text-indigo-600 transition"
+              className="rounded-full bg-gray-100 dark:bg-gray-800 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-indigo-100 dark:bg-indigo-900/40 hover:text-indigo-600 dark:text-indigo-400 transition"
             >
               📜 版本历史
             </button>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+            <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
               ✅ 已生成
             </span>
           </div>
@@ -676,7 +676,7 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
       <div className="p-6">
         {annotationLoading ? (
           <div className="text-center py-4">
-            <span className="text-sm text-gray-400">⏳ 加载评论中...</span>
+            <span className="text-sm text-gray-400 dark:text-gray-500">⏳ 加载评论中...</span>
           </div>
         ) : (
           <StructuredScriptView
@@ -692,11 +692,11 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
       </div>
 
       {/* 时间/地点信息 */}
-      <div className="border-t border-gray-100 bg-gray-50 px-6 py-3">
-        <div className="flex gap-4 text-xs text-gray-400">
+      <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-6 py-3">
+        <div className="flex gap-4 text-xs text-gray-400 dark:text-gray-500">
           <span>📍 {scene.location}</span>
           <span>⏰ {scene.timeOfDay}</span>
-          {scene.isLocked && <span className="text-amber-500">🔒 已锁定</span>}
+          {scene.isLocked && <span className="text-amber-500 dark:text-amber-400">🔒 已锁定</span>}
         </div>
       </div>
     </div>

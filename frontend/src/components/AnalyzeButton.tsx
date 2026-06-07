@@ -38,7 +38,7 @@ export default function AnalyzeButton({ novelId, onAnalyzed }: AnalyzeButtonProp
       <button
         onClick={handleAnalyze}
         disabled={analyzing}
-        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-sm dark:shadow-gray-950/30 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {analyzing ? (
           <>
@@ -55,7 +55,7 @@ export default function AnalyzeButton({ novelId, onAnalyzed }: AnalyzeButtonProp
         )}
       </button>
       {error && (
-        <p className="mt-3 text-sm text-red-600">❌ {error}</p>
+        <p className="mt-3 text-sm text-red-600 dark:text-red-400">❌ {error}</p>
       )}
     </div>
   );

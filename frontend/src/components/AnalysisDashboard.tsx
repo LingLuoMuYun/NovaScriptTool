@@ -7,8 +7,8 @@ import { Character } from "@/lib/api";
 const CharacterNetworkGraph = dynamic(() => import("./CharacterNetworkGraph"), {
   ssr: false,
   loading: () => (
-    <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-      <p className="text-gray-400">⏳ 加载关系图中...</p>
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center shadow-sm dark:shadow-gray-950/30">
+      <p className="text-gray-400 dark:text-gray-500">⏳ 加载关系图中...</p>
     </div>
   ),
 });
@@ -36,23 +36,23 @@ export default function AnalysisDashboard({
     <div className="space-y-6">
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-2xl font-bold text-indigo-600">{sceneCount}</p>
-          <p className="text-xs text-gray-400">总场景数</p>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm dark:shadow-gray-950/30">
+          <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{sceneCount}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">总场景数</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm dark:shadow-gray-950/30">
           <p className="text-2xl font-bold text-amber-600">{characterCount}</p>
-          <p className="text-xs text-gray-400">总角色数</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">总角色数</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-2xl font-bold text-red-500">{conflictCount}</p>
-          <p className="text-xs text-gray-400">冲突事件</p>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm dark:shadow-gray-950/30">
+          <p className="text-2xl font-bold text-red-500 dark:text-red-400">{conflictCount}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">冲突事件</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-2xl font-bold text-emerald-500">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 shadow-sm dark:shadow-gray-950/30">
+          <p className="text-2xl font-bold text-emerald-500 dark:text-emerald-400">
             {new Set((analysis?.conflicts || []).map((c: any) => c.type)).size}
           </p>
-          <p className="text-xs text-gray-400">冲突类型</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">冲突类型</p>
         </div>
       </div>
 

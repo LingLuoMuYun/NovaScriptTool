@@ -8,7 +8,7 @@ interface DiffViewerProps {
 
 export default function DiffViewer({ diffs }: DiffViewerProps) {
   if (!diffs || diffs.length === 0) {
-    return <p className="p-6 text-center text-sm text-gray-400">无差异</p>;
+    return <p className="p-6 text-center text-sm text-gray-400 dark:text-gray-500">无差异</p>;
   }
 
   const addedCount = diffs.filter((d) => d.type === "added").reduce((s, d) => s + d.lines.length, 0);
@@ -17,9 +17,9 @@ export default function DiffViewer({ diffs }: DiffViewerProps) {
   return (
     <div>
       {/* 差异统计 */}
-      <div className="flex gap-4 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs">
-        <span className="text-green-600">+{addedCount} 行新增</span>
-        <span className="text-red-600">-{removedCount} 行删除</span>
+      <div className="flex gap-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-4 py-2 text-xs">
+        <span className="text-green-600 dark:text-green-400">+{addedCount} 行新增</span>
+        <span className="text-red-600 dark:text-red-400">-{removedCount} 行删除</span>
       </div>
 
       {/* 代码对比 */}
@@ -29,14 +29,14 @@ export default function DiffViewer({ diffs }: DiffViewerProps) {
             key={i}
             className={`flex ${
               diff.type === "added"
-                ? "bg-green-50"
+                ? "bg-green-50 dark:bg-green-950"
                 : diff.type === "removed"
-                ? "bg-red-50"
+                ? "bg-red-50 dark:bg-red-950"
                 : ""
             }`}
           >
             {/* 行号列 */}
-            <div className="w-16 shrink-0 select-none border-r border-gray-100 bg-gray-50 px-2 text-right text-gray-400">
+            <div className="w-16 shrink-0 select-none border-r border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-2 text-right text-gray-400 dark:text-gray-500">
               {diff.type === "added" && diff.newLineNum != null && (
                 <span>{diff.newLineNum}</span>
               )}
@@ -48,7 +48,7 @@ export default function DiffViewer({ diffs }: DiffViewerProps) {
               )}
             </div>
             {/* 行号列（新版） */}
-            <div className="w-16 shrink-0 select-none border-r border-gray-100 bg-gray-50 px-2 text-right text-gray-400">
+            <div className="w-16 shrink-0 select-none border-r border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-2 text-right text-gray-400 dark:text-gray-500">
               {diff.type === "added" && diff.newLineNum != null && (
                 <span>{diff.newLineNum}</span>
               )}
@@ -69,7 +69,7 @@ export default function DiffViewer({ diffs }: DiffViewerProps) {
                       ? "text-green-800"
                       : diff.type === "removed"
                       ? "text-red-800 line-through"
-                      : "text-gray-700"
+                      : "text-gray-700 dark:text-gray-200"
                   }`}
                 >
                   <span className="mr-2 select-none">

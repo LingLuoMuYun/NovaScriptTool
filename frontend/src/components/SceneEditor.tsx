@@ -71,14 +71,14 @@ export default function SceneEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="mx-4 w-full max-w-lg animate-fade-in rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
+      <div className="mx-4 w-full max-w-lg animate-fade-in rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-xl">
         <div className="mb-5 flex items-center gap-3">
           <span className="text-2xl">{mode === "create" ? "🎬" : "✏️"}</span>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               {mode === "create" ? "添加场景" : "编辑场景"}
             </h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               {mode === "create" ? "手动创建新场景及其剧本" : `修改场景 ${scene?.sceneNum} 的信息`}
             </p>
           </div>
@@ -87,7 +87,7 @@ export default function SceneEditor({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 场景编号 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               场景编号 <span className="text-red-400">*</span>
             </label>
             <input
@@ -95,28 +95,28 @@ export default function SceneEditor({
               min={1}
               value={sceneNum}
               onChange={(e) => setSceneNum(Number(e.target.value))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none transition"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none transition"
               placeholder="例如: 1"
             />
           </div>
 
           {/* 地点 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               地点 <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none transition"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none transition"
               placeholder="例如: 星海学院 - 教学楼大厅"
             />
           </div>
 
           {/* 时间 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               时间 <span className="text-red-400">*</span>
             </label>
             <div className="flex flex-wrap gap-2">
@@ -127,8 +127,8 @@ export default function SceneEditor({
                   onClick={() => setTimeOfDay(t)}
                   className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                     timeOfDay === t
-                      ? "border-indigo-400 bg-indigo-50 text-indigo-700 font-medium"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300"
+                      ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-medium"
+                      : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:border-gray-300 dark:border-gray-600"
                   }`}
                 >
                   {t}
@@ -140,14 +140,14 @@ export default function SceneEditor({
           {/* 初始剧本（仅创建模式） */}
           {mode === "create" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                初始剧本 <span className="text-gray-400 font-normal">(可选)</span>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                初始剧本 <span className="text-gray-400 dark:text-gray-500 font-normal">(可选)</span>
               </label>
               <textarea
                 value={yamlContent}
                 onChange={(e) => setYamlContent(e.target.value)}
                 rows={6}
-                className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-indigo-400 focus:outline-none transition"
+                className="w-full resize-none rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 font-mono text-sm focus:border-indigo-400 focus:outline-none transition"
                 placeholder={`dialogue:\n  - character: "主角"\n    line: "..."\n\naction:\n  - "..."`}
               />
             </div>
@@ -155,8 +155,8 @@ export default function SceneEditor({
 
           {/* 错误提示 */}
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-              <p className="text-sm text-red-600">{error}</p>
+            <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-3 py-2">
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
             </div>
           )}
 
@@ -166,7 +166,7 @@ export default function SceneEditor({
               type="button"
               onClick={onCancel}
               disabled={saving}
-              className="rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              className="rounded-xl border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950 transition disabled:opacity-50"
             >
               取消
             </button>
