@@ -6,6 +6,7 @@ import { PrismaClient } from "@prisma/client";
 import { mimoClient, deepseekClient, chatCompletion } from "./services/ai.service";
 import { cleanText, splitChapters, chunkByChars, analyzeText } from "./utils/text-processor";
 import { jobQueue } from "./services/job-queue.service";
+import { initFTS5, search as fullTextSearch } from "./services/search.service";
 
 const prisma = new PrismaClient();
 const app = express();
@@ -55,6 +56,29 @@ app.get("/api/health", async (_req, res) => {
     res.json({ status: "ok", db: "connected" });
   } catch {
     res.json({ status: "ok", db: "disconnected" });
+  }
+});
+
+// --- FTS5 全文搜索 ---
+
+app.get("/api/search", async (req, res) => {
+  try {
+    const query = (req.query.q as string) || "";
+    const target = (req.query.target as string) || "all";
+    const novelId = req.query.novelId as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const result = await fullTextSearch(query, {
+      target: target as any,
+      novelId,
+      limit: Math.min(limit, 50),
+      offset,
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -2284,8 +2308,11 @@ app.post("/api/novels/:id/incremental-pipeline/queue", async (req, res) => {
 
 // ─── 服务器启动 ─────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Backend running on http://localhost:${PORT}`);
   console.log(`Mimo Model: ${process.env.MIMO_MODEL || "mimo-v2.5"}`);
   console.log(`Database: SQLite (file:./dev.db)`);
+
+  // 异步初始化 FTS5 全文搜索（不阻塞服务器启动）
+  initFTS5().catch((err) => console.warn("FTS5 init warning:", err.message));
 });

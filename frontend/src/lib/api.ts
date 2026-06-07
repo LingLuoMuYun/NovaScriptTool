@@ -650,3 +650,41 @@ export function subscribeJobStream(
   return controller;
 }
 
+// ─── FTS5 全文搜索 API ────────────────────────────────────
+
+export interface SearchResult {
+  id: string;
+  targetType: "novels" | "scripts" | "characters" | "annotations";
+  title: string;
+  snippet: string;       // 带 HTML <b> 标记
+  novelId: string;
+  novelTitle: string;
+  url: string;
+  rank: number;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+  total: number;
+  tookMs: number;
+  usingFTS5: boolean;
+}
+
+/**
+ * 全文搜索（跨小说/剧本/角色/注记）
+ * @param query 搜索关键词
+ * @param target 限定搜索范围，默认 'all'
+ * @param novelId 限定小说范围
+ */
+export function search(
+  query: string,
+  options?: { target?: string; novelId?: string; limit?: number }
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (options?.target) params.set("target", options.target);
+  if (options?.novelId) params.set("novelId", options.novelId);
+  if (options?.limit) params.set("limit", String(options.limit));
+  return request(`/api/search?${params.toString()}`);
+}
+

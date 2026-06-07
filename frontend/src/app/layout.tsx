@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import DarkModeToggle from "@/components/DarkModeToggle";
+import GlobalSearch from "@/components/GlobalSearch";
 
 export const metadata: Metadata = {
   title: "NovaScriptTool — AI 小说转剧本",
@@ -15,14 +16,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           {/* 顶部导航 */}
           <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/80 backdrop-blur dark:border-gray-800 dark:bg-gray-950/80">
-            <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+            <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
               <a
                 href="/"
-                className="flex items-center gap-2 text-lg font-bold text-gray-900 hover:text-indigo-600 dark:text-indigo-400 transition dark:text-gray-100 dark:hover:text-indigo-400"
+                className="flex items-center gap-2 text-lg font-bold text-gray-900 hover:text-indigo-600 dark:text-indigo-400 transition dark:text-gray-100 dark:hover:text-indigo-400 flex-shrink-0"
               >
                 🎬 NovaScriptTool
               </a>
-              <nav className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex-1 max-w-sm">
+                <GlobalSearch />
+              </div>
+              <nav className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">
                 <DarkModeToggle />
                 <a
                   href="https://github.com/LingLuoMuYun/NovaScriptTool"

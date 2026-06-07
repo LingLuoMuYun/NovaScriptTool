@@ -16,6 +16,7 @@ import ImpactDialog from "@/components/ImpactDialog";
 import SceneEditor from "@/components/SceneEditor";
 import AnalysisDashboard from "@/components/AnalysisDashboard";
 import ChatPanel from "@/components/ChatPanel";
+import GlobalSearch from "@/components/GlobalSearch";
 import { buildDeps, analyzeImpact, runIncrementalPipeline, getDepsStatus, getChangedScenes } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -389,6 +390,11 @@ export default function NovelDetailPage() {
             : novel.status === "analyzed" ? "🔍 已分析"
             : "✅ 已完成"}
         </span>
+      </div>
+
+      {/* 全文搜索（限定当前小说） */}
+      <div className="mb-4">
+        <GlobalSearch novelId={id} />
       </div>
 
       {/* 操作按钮 */}

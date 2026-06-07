@@ -56,7 +56,7 @@ npm run electron:build          # 打包为 Windows/macOS/Linux 安装包
 | **图表** | Recharts · react-force-graph-2d |
 | **后端框架** | Express 4 |
 | **ORM** | Prisma 5 |
-| **数据库** | SQLite |
+| **数据库** | SQLite · FTS5 全文搜索 |
 | **AI 引擎** | DeepSeek (聊天) · Mimo v2.5 (分析流水线) |
 | **AI SDK** | OpenAI SDK 6 |
 | **桌面打包** | Electron 33 · electron-builder 25 |
@@ -144,6 +144,10 @@ Agent 间传递结构化约束（角色列表、剧情大纲），避免单一 A
 
 支持导出为 YAML、Final Draft (.fdx)、Fountain 三种剧本格式，兼容专业编剧软件。
 
+### 10. SQLite FTS5 全文搜索引擎
+
+基于 SQLite FTS5 的全文检索引擎，跨小说/剧本/角色/注记四维搜索，BM25 相关性排序 + 上下文摘要提取，自动索引同步触发器，LIKE 降级兜底。⌘K 全局搜索弹窗支持实时过滤与键盘导航。
+
 ---
 
 ## 🧩 原创功能
@@ -161,6 +165,7 @@ Agent 间传递结构化约束（角色列表、剧情大纲），避免单一 A
 | **安全降级策略** | AI 内容审核拦截后自动缩短文本 + 关闭思维链重试的多级降级 |
 | **模板化 AI 聊天** | 8 套编剧风格模板，每套独立的 system prompt/temperature/角色偏好 |
 | **并发控制与任务队列** | 内存级 FIFO 任务队列 + 令牌桶速率限制器，可配置并发数，SSE 实时推送队列状态，排队任务可取消 |
+| **FTS5 全文搜索引擎** | SQLite FTS5 跨小说/剧本/角色/注记四维搜索，BM25 排序 + 摘要提取，触发器自动同步索引，LIKE 降级兜底 |
 | **Electron 双进程管理** | 主进程管理 Express + Next.js 子进程生命周期，健康检查等待，数据库自动迁移 |
 
 ---
@@ -182,6 +187,7 @@ NovaScriptTool/
 │       │   ├── PipelineProgress.tsx # 流水线进度可视化
 │       │   ├── TemplateSelector.tsx # 项目模板选择器
 │       │   ├── QueueStatusPanel.tsx  # 并发队列状态面板
+│       │   ├── GlobalSearch.tsx       # ⌘K 全文搜索弹窗
 │       │   └── ...                  # 其余 16 个组件
 │       └── lib/api.ts               # API 客户端 (含 SSE 队列订阅)
 ├── backend/                         # Express API Server
@@ -193,7 +199,8 @@ NovaScriptTool/
 │   │   │   ├── dependency.service.ts# 依赖图谱 + BFS 影响分析
 │   │   │   ├── diff.service.ts      # 版本 Diff 引擎
 │   │   │   ├── export.service.ts    # 多格式导出
-│   │   │   └── job-queue.service.ts # 并发控制 + 令牌桶 + FIFO 队列
+│   │   │   ├── job-queue.service.ts # 并发控制 + 令牌桶 + FIFO 队列
+│   │   │   └── search.service.ts     # FTS5 全文搜索引擎
 │   │   ├── schemas/                 # Zod Schema 定义
 │   │   └── utils/text-processor.ts  # 文本预处理 + 章节分割
 │   └── prisma/schema.prisma         # 7 个数据模型
