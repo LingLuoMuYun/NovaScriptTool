@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 
 // ─── 类型 ─────────────────────────────────────────
 
@@ -103,6 +103,58 @@ export default function ScriptBlockEditor({
     }
   };
 
+  // ─── 本地实时校验 ──────────────────────────────
+
+  const validation = useMemo(() => {
+    if (!script) return null;
+    const issues: { rule: string; severity: "error" | "warning"; path: string; message: string }[] = [];
+    const { content, charactersInScene } = script;
+    if (!content || content.length === 0) return { errors: 0, warnings: 0, issues };
+
+    // R001: 转场结尾
+    if (content[content.length - 1].type !== "transition") {
+      issues.push({ rule: "R001", severity: "error", path: `content[${content.length - 1}]`, message: "场景结尾必须是转场指令" });
+    }
+    // R006: 空场景
+    if (content.filter((b) => b.type !== "transition").length === 0) {
+      issues.push({ rule: "R006", severity: "warning", path: "content", message: "剧本仅包含转场指令" });
+    }
+
+    const charDialogueMap = new Map<string, boolean>();
+    let consecutiveCount = 0, lastType = "";
+    for (let i = 0; i < content.length; i++) {
+      const b = content[i];
+      if (b.type === "action" && (b.text || "").trim().length < 5) {
+        issues.push({ rule: "R003", severity: "warning", path: `content[${i}]`, message: "动作描述过短" });
+      }
+      if (b.type === "dialogue") {
+        charDialogueMap.set(b.character || "", true);
+        if (charactersInScene && charactersInScene.length > 0 && !(charactersInScene.includes(b.character || ""))) {
+          issues.push({ rule: "R002", severity: "error", path: `content[${i}]`, message: `"${b.character}" 未在出场角色中声明` });
+        }
+        if ((b.line || "").trim().length < 2) {
+          issues.push({ rule: "R003", severity: "warning", path: `content[${i}]`, message: "对白过短" });
+        }
+      }
+      if (b.type === lastType && b.type !== "transition") consecutiveCount++;
+      else { consecutiveCount = 1; lastType = b.type; }
+      if (consecutiveCount >= 3 && consecutiveCount === 3) {
+        issues.push({ rule: "R004", severity: "warning", path: `content[${i - 2}]~[${i}]`, message: "连续相同类型块" });
+      }
+    }
+    // R005
+    if (charactersInScene) {
+      for (const n of charactersInScene) {
+        if (!charDialogueMap.has(n)) {
+          issues.push({ rule: "R005", severity: "warning", path: "charactersInScene", message: `"${n}" 出场但无对白` });
+        }
+      }
+    }
+    const errors = issues.filter((i) => i.severity === "error").length;
+    const warnings = issues.filter((i) => i.severity === "warning").length;
+    return { errors, warnings, issues };
+  }, [script]);
+
   // ─── 场景元数据 ──────────────────────────────────
 
   const updateMeta = <K extends keyof ScriptData>(key: K, val: ScriptData[K]) => {
@@ -154,6 +206,22 @@ export default function ScriptBlockEditor({
           <span className="ml-2 text-gray-300 dark:text-gray-600">
             {script.location || "未设置"} · {script.timeOfDay || "?"} · {script.content.length} 块
           </span>
+          {/* 实时校验指示灯 */}
+          {validation && (
+            <span className="ml-2 inline-flex items-center gap-1">
+              {validation.errors > 0 ? (
+                <span className="inline-flex items-center gap-0.5 text-red-500 dark:text-red-400" title={`${validation.errors} 个错误`}>
+                  🔴 {validation.errors}
+                </span>
+              ) : validation.warnings > 0 ? (
+                <span className="inline-flex items-center gap-0.5 text-amber-500 dark:text-amber-400" title={`${validation.warnings} 个警告`}>
+                  🟡 {validation.warnings}
+                </span>
+              ) : (
+                <span className="text-green-500 dark:text-green-400" title="全部通过">🟢</span>
+              )}
+            </span>
+          )}
         </summary>
         <div className="px-4 pb-3 space-y-2">
           <div className="grid grid-cols-2 gap-2">

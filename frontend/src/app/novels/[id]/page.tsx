@@ -15,6 +15,7 @@ import AnnotationPanel from "@/components/AnnotationPanel";
 import ImpactDialog from "@/components/ImpactDialog";
 import SceneEditor from "@/components/SceneEditor";
 import AnalysisDashboard from "@/components/AnalysisDashboard";
+import ValidationPanel from "@/components/ValidationPanel";
 import ChatPanel from "@/components/ChatPanel";
 import GlobalSearch from "@/components/GlobalSearch";
 import { buildDeps, analyzeImpact, runIncrementalPipeline, getDepsStatus, getChangedScenes, getCacheStatus } from "@/lib/api";
@@ -62,6 +63,8 @@ export default function NovelDetailPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editingScene, setEditingScene] = useState<SceneWithScripts | null>(null);
+  // 校验面板状态
+  const [showValidation, setShowValidation] = useState(false);
 
   const fetchNovel = useCallback(async () => {
     setFetchError("");
@@ -477,6 +480,16 @@ export default function NovelDetailPage() {
           </>
         )}
 
+        {/* Schema 校验 */}
+        {scenes.length > 0 && (
+          <button
+            onClick={() => setShowValidation(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-5 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm dark:shadow-gray-950/30 transition hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            🔍 校验剧本
+          </button>
+        )}
+
         {/* 多格式导出下拉菜单 */}
         {scenes.length > 0 && (
           <div className="relative">
@@ -695,6 +708,22 @@ export default function NovelDetailPage() {
           <span className="text-lg">🤖</span>
           <span>AI 助手</span>
         </button>
+      )}
+
+      {/* 剧本校验报告面板 */}
+      {showValidation && (
+        <ValidationPanel
+          novelId={id}
+          onClose={() => setShowValidation(false)}
+          onSceneClick={(sceneNum: number) => {
+            setShowValidation(false);
+            const scene = scenes.find((s) => s.sceneNum === sceneNum);
+            if (scene) {
+              setSelectedScene(scene);
+              setActiveTab("scenes");
+            }
+          }}
+        />
       )}
 
       {/* 增量重算影响确认弹窗 */}

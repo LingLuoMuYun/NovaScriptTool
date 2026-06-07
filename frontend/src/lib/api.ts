@@ -503,21 +503,38 @@ export function streamChat(
   return controller;
 }
 
-export interface ValidationResult {
+export interface SemanticIssue {
+  rule: string;
+  severity: "error" | "warning";
+  path: string;
+  message: string;
+  fix?: string;
+}
+
+export interface CrossSceneIssue {
+  rule: string;
+  severity: string;
+  scenes: number[];
+  message: string;
+}
+
+export interface SceneValidationResult {
+  sceneNum: number;
+  location: string;
+  status: "valid" | "warning" | "error" | "legacy_parsed" | "legacy_unparseable" | "legacy_json_no_content" | "empty";
+  format?: string;
+  structuralErrors: string[];
+  semanticIssues: SemanticIssue[];
+  blockCount: number;
+  characterCount: number;
+}
+
+export interface ValidationReport {
   totalScenes: number;
-  validCount: number;
-  structuredCount: number;
-  legacyCount: number;
-  invalidCount: number;
-  results: {
-    sceneNum: number;
-    status: string;
-    format?: string;
-    errors?: string[];
-    warnings?: string[];
-    characterCount?: number;
-    blockCount?: number;
-  }[];
+  structural: { valid: number; invalid: number; legacy: number };
+  semantic: { errors: number; warnings: number };
+  crossSceneIssues: CrossSceneIssue[];
+  scenes: SceneValidationResult[];
 }
 
 export interface CacheStatus {
@@ -534,7 +551,7 @@ export function getCacheStatus(novelId: string): Promise<CacheStatus> {
   return request(`/api/novels/${novelId}/cache-status`);
 }
 
-export function validateScripts(novelId: string): Promise<ValidationResult> {
+export function validateScripts(novelId: string): Promise<ValidationReport> {
   return request(`/api/novels/${novelId}/validate`);
 }
 

@@ -629,21 +629,32 @@ app.get("/api/novels/:id/validate", async (req, res) => {
   try {
     const novel = await prisma.novel.findUnique({
       where: { id: req.params.id },
-      include: { scenes: { include: { scripts: true }, orderBy: { sceneNum: "asc" } } },
+      include: { scenes: { include: { scripts: true }, orderBy: { sceneNum: "asc" } }, characters: true },
     });
     if (!novel) return res.status(404).json({ error: "小说不存在" });
 
-    const { validateScript, parseLegacyScript } = await import("./schemas/script.schema");
+    const { validateScript, parseLegacyScript, validateSemantics } = await import("./schemas/script.schema");
+    const allCharacterNames = novel.characters.map((c) => c.name);
 
-    const results: any[] = [];
+    const sceneResults: any[] = [];
     let validCount = 0;
     let structuredCount = 0;
     let legacyCount = 0;
+    let totalErrors = 0;
+    let totalWarnings = 0;
 
     for (const scene of novel.scenes) {
       const yamlContent = scene.scripts[0]?.yamlContent || "";
       if (!yamlContent) {
-        results.push({ sceneNum: scene.sceneNum, status: "empty", errors: ["无剧本内容"] });
+        sceneResults.push({
+          sceneNum: scene.sceneNum,
+          location: scene.location,
+          status: "empty",
+          structuralErrors: ["无剧本内容"],
+          semanticIssues: [],
+          blockCount: 0,
+          characterCount: 0,
+        });
         continue;
       }
 
@@ -652,57 +663,114 @@ app.get("/api/novels/:id/validate", async (req, res) => {
       try {
         parsed = JSON.parse(yamlContent);
       } catch {
-        // 旧格式自由文本
         legacyCount++;
         const legacyResult = parseLegacyScript(yamlContent);
-        results.push({
+        const structuralErrors = legacyResult ? [] : ["无法解析剧本内容"];
+        sceneResults.push({
           sceneNum: scene.sceneNum,
+          location: scene.location,
           status: legacyResult ? "legacy_parsed" : "legacy_unparseable",
           format: "legacy_text",
-          hasContent: !!legacyResult,
-          warnings: legacyResult ? ["旧格式文本，已尽力解析，导出时可能丢失部分信息"] : ["无法解析旧格式文本"],
+          structuralErrors,
+          semanticIssues: [] as any[],
+          blockCount: legacyResult?.content?.length || 0,
+          characterCount: legacyResult?.charactersInScene?.length || 0,
         });
+        if (!legacyResult) totalErrors++;
         continue;
       }
 
       if (parsed && typeof parsed === "object" && "content" in (parsed as any)) {
         structuredCount++;
         const validation = validateScript(parsed);
-        if (validation.valid) {
-          validCount++;
-          results.push({
-            sceneNum: scene.sceneNum,
-            status: "valid",
-            format: "structured",
-            characterCount: validation.script!.charactersInScene.length,
-            blockCount: validation.script!.content.length,
-          });
-        } else {
-          results.push({
-            sceneNum: scene.sceneNum,
-            status: "invalid",
-            format: "structured",
-            errors: validation.errors,
-          });
+
+        // 语义校验
+        let semanticIssues: any[] = [];
+        if (validation.valid && validation.script) {
+          semanticIssues = validateSemantics(validation.script, allCharacterNames);
         }
+
+        const errorCount = validation.errors.length + semanticIssues.filter((i: any) => i.severity === "error").length;
+        const warningCount = semanticIssues.filter((i: any) => i.severity === "warning").length;
+        totalErrors += errorCount;
+        totalWarnings += warningCount;
+
+        if (validation.valid) validCount++;
+
+        let status = "valid";
+        if (!validation.valid || errorCount > 0) status = "error";
+        else if (warningCount > 0) status = "warning";
+
+        sceneResults.push({
+          sceneNum: scene.sceneNum,
+          location: scene.location,
+          status,
+          format: "structured",
+          structuralErrors: validation.errors,
+          semanticIssues,
+          blockCount: validation.script?.content?.length || 0,
+          characterCount: validation.script?.charactersInScene?.length || 0,
+        });
       } else {
         legacyCount++;
-        results.push({
+        sceneResults.push({
           sceneNum: scene.sceneNum,
-          status: "legacy_parsed",
+          location: scene.location,
+          status: "legacy_json_no_content",
           format: "legacy_json_no_content",
-          warnings: ["JSON 格式但缺少 content 数组，视为旧格式"],
+          structuralErrors: ["JSON 格式但缺少 content 数组"],
+          semanticIssues: [],
+          blockCount: 0,
+          characterCount: 0,
         });
+      }
+    }
+
+    // Layer 3: 跨场景校验
+    const crossSceneIssues: { rule: string; severity: string; scenes: number[]; message: string }[] = [];
+
+    // 地点漂移检查
+    for (let i = 0; i < sceneResults.length - 1; i++) {
+      const curr = sceneResults[i];
+      const next = sceneResults[i + 1];
+      if (
+        curr.location && next.location &&
+        curr.location !== next.location &&
+        curr.location.length > 2 && next.location.length > 2
+      ) {
+        // 地点变化正常，记录但不报错（仅当连续多个场景在完全不同地点间跳跃时警告）
+        let jumpCount = 0;
+        for (let j = i; j < sceneResults.length - 1; j++) {
+          if (sceneResults[j].location !== sceneResults[j + 1].location) {
+            jumpCount++;
+          } else {
+            break;
+          }
+        }
+        if (jumpCount >= 3) {
+          crossSceneIssues.push({
+            rule: "C001",
+            severity: "warning",
+            scenes: Array.from({ length: jumpCount + 1 }, (_, k) => sceneResults[i + k].sceneNum),
+            message: `${jumpCount + 1} 个连续场景地点频繁切换，可能影响叙事连贯性`,
+          });
+        }
       }
     }
 
     res.json({
       totalScenes: novel.scenes.length,
-      validCount,
-      structuredCount,
-      legacyCount,
-      invalidCount: structuredCount - validCount,
-      results,
+      structural: {
+        valid: validCount,
+        invalid: structuredCount - validCount,
+        legacy: legacyCount,
+      },
+      semantic: {
+        errors: totalErrors,
+        warnings: totalWarnings,
+      },
+      crossSceneIssues,
+      scenes: sceneResults,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
