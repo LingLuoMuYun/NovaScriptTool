@@ -326,6 +326,156 @@ export function getChangedScenes(
   return request(`/api/novels/${novelId}/changed-scenes`);
 }
 
+// ─── 模板系统 ──────────────────────────────────────
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  genre: string;
+  temperature: number;
+  answerStyle: string;
+  roleTypePreferences: string[];
+  defaultSceneTypes: string[];
+  promptPreview?: string;
+  systemPrompt?: string;
+}
+
+export function getTemplates(): Promise<ProjectTemplate[]> {
+  return request("/api/templates");
+}
+
+export function getTemplate(id: string): Promise<ProjectTemplate> {
+  return request(`/api/templates/${id}`);
+}
+
+// ─── AI 对话 ──────────────────────────────────────
+
+export interface ChatConversation {
+  id: string;
+  novelId: string | null;
+  title: string;
+  mode: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { messages: number };
+  messages?: ChatMessage[];
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+}
+
+export function getConversations(novelId?: string): Promise<ChatConversation[]> {
+  const qs = novelId ? `?novelId=${encodeURIComponent(novelId)}` : "";
+  return request(`/api/chat/conversations${qs}`);
+}
+
+export function createConversation(data: {
+  novelId?: string;
+  title?: string;
+  mode?: string;
+}): Promise<ChatConversation> {
+  return request("/api/chat/conversations", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
+  return request(`/api/chat/conversations/${conversationId}/messages`);
+}
+
+export function deleteConversation(conversationId: string): Promise<{ ok: boolean }> {
+  return request(`/api/chat/conversations/${conversationId}`, { method: "DELETE" });
+}
+
+/**
+ * SSE 流式聊天：返回 AbortController 用于取消
+ * onToken: 收到新 token 时回调
+ * onMeta: 收到会话元数据时回调
+ * onDone: 流结束时回调
+ * onError: 出错时回调
+ */
+export function streamChat(
+  params: {
+    conversationId?: string;
+    novelId?: string;
+    message: string;
+    templateId?: string;
+  },
+  callbacks: {
+    onToken: (token: string) => void;
+    onMeta?: (meta: { conversationId: string; title: string }) => void;
+    onDone?: (conversationId: string) => void;
+    onError?: (error: string) => void;
+  }
+): AbortController {
+  const controller = new AbortController();
+
+  fetch(`${BASE_URL}/api/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        callbacks.onError?.(err.error || `HTTP ${res.status}`);
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.("无法读取响应流");
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          try {
+            const event = JSON.parse(trimmed.slice(5).trim());
+            switch (event.type) {
+              case "meta":
+                callbacks.onMeta?.(event);
+                break;
+              case "token":
+                callbacks.onToken(event.token);
+                break;
+              case "done":
+                callbacks.onDone?.(event.conversationId);
+                break;
+              case "error":
+                callbacks.onError?.(event.error);
+                break;
+            }
+          } catch {}
+        }
+      }
+    })
+    .catch((err) => {
+      if (err.name !== "AbortError") {
+        callbacks.onError?.(err.message);
+      }
+    });
+
+  return controller;
+}
+
 export interface ValidationResult {
   totalScenes: number;
   validCount: number;

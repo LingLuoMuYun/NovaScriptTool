@@ -16,10 +16,11 @@ model Novel {
   createdAt DateTime    @default(now()) @map("created_at")
   updatedAt DateTime    @updatedAt @map("updated_at")
 
-  characters       Character[]
-  scenes           Scene[]
-  annotations      Annotation[]
-  dependencyEdges  DependencyEdge[]
+  characters         Character[]
+  scenes             Scene[]
+  annotations        Annotation[]
+  dependencyEdges    DependencyEdge[]
+  chatConversations  ChatConversation[]
 
   @@map("novels")
 }
@@ -99,4 +100,31 @@ model DependencyEdge {
   novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
 
   @@map("dependency_edges")
+}
+
+model ChatConversation {
+  id        String   @id @default(uuid())
+  novelId   String?  @map("novel_id")
+  title     String
+  mode      String   @default("general")
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  novel    Novel?        @relation(fields: [novelId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
 }

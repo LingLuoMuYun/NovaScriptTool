@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getNovels, Novel } from "@/lib/api";
+import { getNovels, Novel, createNovel, ProjectTemplate } from "@/lib/api";
 import NovelUpload from "@/components/NovelUpload";
 import NovelList from "@/components/NovelList";
+import TemplateSelector from "@/components/TemplateSelector";
 
 export default function Home() {
   const [novels, setNovels] = useState<Novel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
 
   const fetchNovels = useCallback(async () => {
     setLoading(true);
@@ -38,6 +40,14 @@ export default function Home() {
       {/* 上传区 */}
       <div className="mb-8">
         <NovelUpload onUploaded={fetchNovels} />
+      </div>
+
+      {/* 项目模板选择 */}
+      <div className="mb-8">
+        <TemplateSelector
+          onSelect={setSelectedTemplate}
+          selected={selectedTemplate?.id}
+        />
       </div>
 
       {/* 小说列表 */}

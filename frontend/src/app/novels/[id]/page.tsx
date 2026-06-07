@@ -14,6 +14,7 @@ import AnnotationPanel from "@/components/AnnotationPanel";
 import ImpactDialog from "@/components/ImpactDialog";
 import SceneEditor from "@/components/SceneEditor";
 import AnalysisDashboard from "@/components/AnalysisDashboard";
+import ChatPanel from "@/components/ChatPanel";
 import { buildDeps, analyzeImpact, runIncrementalPipeline, getDepsStatus, getChangedScenes } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -57,6 +58,8 @@ export default function NovelDetailPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editingScene, setEditingScene] = useState<SceneWithScripts | null>(null);
+  // AI 聊天面板
+  const [showChat, setShowChat] = useState(false);
 
   const fetchNovel = useCallback(async () => {
     setFetchError("");
@@ -640,6 +643,40 @@ export default function NovelDetailPage() {
             setEditingScene(null);
           }}
         />
+      )}
+
+      {/* AI 聊天浮动按钮 */}
+      {!showChat && (
+        <button
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95 animate-fade-in"
+        >
+          <span className="text-lg">🤖</span>
+          <span>AI 助手</span>
+        </button>
+      )}
+
+      {/* AI 聊天滑出面板 */}
+      {showChat && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* 背景遮罩 */}
+          <div
+            className="absolute inset-0 bg-black/30 dark:bg-black/50"
+            onClick={() => setShowChat(false)}
+          />
+          {/* 面板 */}
+          <div className="relative w-full max-w-lg h-full animate-fade-in">
+            <ChatPanel
+              novelId={id}
+              novelTitle={novel.title}
+              novelCharacters={characters.map((c) => ({
+                name: c.name,
+                roleType: c.roleType,
+              }))}
+              onClose={() => setShowChat(false)}
+            />
+          </div>
+        </div>
       )}
 
       {/* 增量重算影响确认弹窗 */}

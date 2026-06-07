@@ -1520,6 +1520,446 @@ app.delete("/api/annotations/:id", async (req, res) => {
   }
 });
 
+// --- 🆕 项目模板系统 ---
+
+interface ProjectTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  genre: string;
+  systemPrompt: string;
+  temperature: number;
+  answerStyle: string;
+  roleTypePreferences: string[];
+  defaultSceneTypes: string[];
+}
+
+const TEMPLATES: ProjectTemplate[] = [
+  {
+    id: "ancient",
+    name: "古装",
+    icon: "🏯",
+    description: "古代宫廷、武侠江湖题材，适合古装言情、权谋、仙侠小说",
+    genre: "古装",
+    systemPrompt: `你是一位资深的古装剧编剧顾问。你精通：
+- 古代礼仪与宫廷文化
+- 武侠门派体系与江湖规矩
+- 仙侠世界观构建
+- 古代官职体系与科举制度
+- 文言文与现代对白的平衡
+
+在帮助用户改编古装小说时，你会：
+1. 关注角色服饰、礼仪、称谓是否符合朝代背景
+2. 建议场景中的古代建筑、器物描写
+3. 对白中适当融入古风词汇但不过度文言化
+4. 注意武侠/仙侠打斗场景的节奏与画面感`,
+    temperature: 0.7,
+    answerStyle: "teaching",
+    roleTypePreferences: ["主角", "主角", "配角", "反派", "路人"],
+    defaultSceneTypes: ["宫殿", "府邸", "街道", "战场", "密室", "山林", "客栈"],
+  },
+  {
+    id: "urban",
+    name: "都市",
+    icon: "🏙️",
+    description: "现代都市生活、职场、爱情题材",
+    genre: "都市",
+    systemPrompt: `你是一位资深的都市剧编剧顾问。你擅长：
+- 现代职场生态与行业细节
+- 都市情感关系的细腻刻画
+- 快节奏叙事的节奏掌控
+- 现实主义题材的社会议题探讨
+
+在帮助用户改编都市小说时，你会：
+1. 建议场景选取最具都市感的真实地点
+2. 对白设计注重自然、生活化但有戏剧张力
+3. 关注当代社会议题与现实困境的真实呈现
+4. 情感线需要层次分明、起伏有致`,
+    temperature: 0.6,
+    answerStyle: "concise",
+    roleTypePreferences: ["主角", "配角", "反派", "路人"],
+    defaultSceneTypes: ["办公室", "公寓", "咖啡厅", "街道", "商场", "医院", "学校"],
+  },
+  {
+    id: "mystery",
+    name: "悬疑",
+    icon: "🔍",
+    description: "悬疑推理、犯罪探案、心理惊悚题材",
+    genre: "悬疑",
+    systemPrompt: `你是一位资深的悬疑剧编剧顾问。你精通：
+- 悬疑故事的伏笔设计（契诃夫之枪原则）
+- 推理线索的合理铺设与误导技巧
+- 犯罪心理与行为分析
+- 非线性叙事（闪回、多视角）技巧
+- 反转设计的戏剧张力
+
+在帮助用户改编悬疑小说时，你会：
+1. 确保每个线索在场景中有明确归属
+2. 建议在关键场景制造信息不对称
+3. 节奏控制：缓慢铺垫→紧张升级→爆点释放
+4. 角色对白中埋设暗示但不暴露谜底`,
+    temperature: 0.5,
+    answerStyle: "strict",
+    roleTypePreferences: ["主角", "反派", "配角", "路人"],
+    defaultSceneTypes: ["案发现场", "警局", "住宅", "街道", "审讯室", "医院", "废弃建筑"],
+  },
+  {
+    id: "scifi",
+    name: "科幻",
+    icon: "🚀",
+    description: "科幻未来、人工智能、太空探索、赛博朋克题材",
+    genre: "科幻",
+    systemPrompt: `你是一位资深的科幻剧编剧顾问。你擅长：
+- 科幻世界观的逻辑自洽构建
+- 未来科技的社会影响推演
+- AI/机器人伦理议题
+- 太空探索与外星文明的合理想象
+- 赛博朋克美学与反乌托邦叙事
+
+在帮助用户改编科幻小说时，你会：
+1. 确保科技设定前后一致、有合理解释
+2. 建议通过场景细节展示世界观（而非大段旁白）
+3. 关注科技对人性的影响，而非单纯炫技
+4. 视觉化描写要具有电影感`,
+    temperature: 0.8,
+    answerStyle: "teaching",
+    roleTypePreferences: ["主角", "配角", "反派", "路人"],
+    defaultSceneTypes: ["太空站", "实验室", "控制中心", "城市街道", "虚拟空间", "飞船", "废土"],
+  },
+  {
+    id: "fantasy",
+    name: "奇幻",
+    icon: "🧙",
+    description: "西方奇幻、魔法世界、异世界冒险题材",
+    genre: "奇幻",
+    systemPrompt: `你是一位资深的奇幻剧编剧顾问。你精通：
+- 魔法体系的世界观构建
+- 种族设定（精灵、矮人、龙族等）的戏剧化呈现
+- 史诗叙事的宏大结构与个人命运的交织
+- 冒险旅程的经典叙事模型
+
+在帮助用户改编奇幻小说时，你会：
+1. 魔法战斗场景的视觉化呈现建议
+2. 帮助平衡多线叙事的时间分配
+3. 奇幻世界观通过角色互动自然展示
+4. 角色成长弧线与世界命运的关联`,
+    temperature: 0.75,
+    answerStyle: "teaching",
+    roleTypePreferences: ["主角", "主角", "配角", "反派", "路人", "路人"],
+    defaultSceneTypes: ["城堡", "森林", "村庄", "战场", "洞穴", "酒馆", "魔法塔"],
+  },
+  {
+    id: "history",
+    name: "历史",
+    icon: "📜",
+    description: "历史正剧、历史传奇、年代剧题材",
+    genre: "历史",
+    systemPrompt: `你是一位资深的历史剧编剧顾问。你精通：
+- 中国各朝代的历史背景与重大事件
+- 历史人物的性格塑造与戏剧化改编
+- 历史真实与艺术创作的平衡
+- 年代感的场景与道具设计
+
+在帮助用户改编历史小说时，你会：
+1. 指出小说中与史实不符之处，建议如何艺术化处理
+2. 帮助设计符合时代背景的礼仪、称谓、服饰
+3. 大场面（战争、朝会、祭祀）的影视化建议
+4. 历史人物的对白需兼顾时代感与现代观众理解`,
+    temperature: 0.6,
+    answerStyle: "strict",
+    roleTypePreferences: ["主角", "配角", "配角", "反派", "路人"],
+    defaultSceneTypes: ["宫殿", "朝堂", "战场", "府邸", "市集", "书房", "军营"],
+  },
+  {
+    id: "romance",
+    name: "言情",
+    icon: "💕",
+    description: "现代/古代言情、青春校园、都市爱情题材",
+    genre: "言情",
+    systemPrompt: `你是一位资深的言情剧编剧顾问。你擅长：
+- 情感线的情感层次设计（初识→暧昧→升温→冲突→和解/遗憾）
+- 角色关系的化学反应与对白设计
+- 浪漫场景的视觉化呈现
+- 青春校园/都市爱情的细腻质感
+
+在帮助用户改编言情小说时，你会：
+1. 重点设计男女主的关键对白场景
+2. 建议通过细节动作、微表情传达情感
+3. 冲突设计需要基于角色性格而非误会巧合
+4. 浪漫场景的氛围营造建议（光线、场景、配乐）`,
+    temperature: 0.7,
+    answerStyle: "teaching",
+    roleTypePreferences: ["主角", "主角", "配角", "路人"],
+    defaultSceneTypes: ["住宅", "咖啡厅", "校园", "公园", "餐厅", "街道", "办公室"],
+  },
+  {
+    id: "general",
+    name: "通用",
+    icon: "📝",
+    description: "通用模板，适用于所有类型的小说改编",
+    genre: "通用",
+    systemPrompt: `你是一位专业的影视编剧顾问。你帮助作者将小说改编为剧本。
+
+你的核心能力：
+1. 分析小说剧情结构，提取核心冲突与情感线
+2. 帮助设计场景切分与对白改编
+3. 提供角色塑造建议
+4. 解答剧本创作相关问题
+
+在回答时注意：
+- 先从整体结构分析，再进入具体细节
+- 给出具体可操作的建议，而非泛泛而谈
+- 尊重原作的风格和作者的创作意图
+- 如需了解小说内容，可以主动询问`,
+    temperature: 0.65,
+    answerStyle: "teaching",
+    roleTypePreferences: ["主角", "配角", "反派"],
+    defaultSceneTypes: ["通用场景"],
+  },
+];
+
+// 获取所有模板（脱敏：不返回完整 systemPrompt，仅摘要）
+app.get("/api/templates", async (_req, res) => {
+  try {
+    const templates = TEMPLATES.map(({ systemPrompt, ...rest }) => ({
+      ...rest,
+      promptPreview: systemPrompt.split("\n").slice(0, 3).join("\n"),
+    }));
+    res.json(templates);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 获取单个模板详情（含完整 systemPrompt）
+app.get("/api/templates/:id", async (req, res) => {
+  try {
+    const template = TEMPLATES.find((t) => t.id === req.params.id);
+    if (!template) return res.status(404).json({ error: "模板不存在" });
+    res.json(template);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 🆕 AI 对话系统 ---
+
+// 获取会话列表
+app.get("/api/chat/conversations", async (req, res) => {
+  try {
+    const { novelId } = req.query;
+    const where: any = { status: "active" };
+    if (novelId) where.novelId = String(novelId);
+
+    const conversations = await prisma.chatConversation.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      include: { _count: { select: { messages: true } } },
+    });
+    res.json(conversations);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 创建新会话
+app.post("/api/chat/conversations", async (req, res) => {
+  try {
+    const { novelId, title, mode } = req.body;
+    const conversation = await prisma.chatConversation.create({
+      data: {
+        novelId: novelId || null,
+        title: title || "新对话",
+        mode: mode || "general",
+      },
+    });
+    res.status(201).json(conversation);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 获取会话消息
+app.get("/api/chat/conversations/:id/messages", async (req, res) => {
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: { conversationId: req.params.id },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json(messages);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 删除会话
+app.delete("/api/chat/conversations/:id", async (req, res) => {
+  try {
+    await prisma.chatConversation.update({
+      where: { id: req.params.id },
+      data: { status: "deleted" },
+    });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SSE 流式聊天
+app.post("/api/chat/stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const sendEvent = (event: any) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  let aborted = false;
+  req.on("close", () => { aborted = true; });
+
+  try {
+    const { conversationId, novelId, message, templateId, history } = req.body;
+
+    if (!message || !message.trim()) {
+      sendEvent({ type: "error", error: "消息不能为空" });
+      return res.end();
+    }
+
+    // 获取或创建会话
+    let conversation;
+    if (conversationId) {
+      conversation = await prisma.chatConversation.findUnique({
+        where: { id: conversationId },
+      });
+      if (!conversation) {
+        sendEvent({ type: "error", error: "会话不存在" });
+        return res.end();
+      }
+    } else {
+      const title = message.trim().substring(0, 40) + (message.length > 40 ? "..." : "");
+      conversation = await prisma.chatConversation.create({
+        data: {
+          novelId: novelId || null,
+          title,
+          mode: templateId ? "template" : "general",
+        },
+      });
+    }
+
+    // 获取历史消息
+    const existingMessages = await prisma.chatMessage.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+
+    // 构建 system prompt
+    let systemPrompt: string;
+    if (templateId) {
+      const template = TEMPLATES.find((t) => t.id === templateId);
+      systemPrompt = template?.systemPrompt || TEMPLATES.find((t) => t.id === "general")!.systemPrompt;
+    } else {
+      systemPrompt = TEMPLATES.find((t) => t.id === "general")!.systemPrompt;
+    }
+
+    // 如果有关联小说，补充上下文
+    if (novelId) {
+      const novel = await prisma.novel.findUnique({
+        where: { id: novelId },
+        include: {
+          characters: { take: 10 },
+          scenes: { take: 5, orderBy: { sceneNum: "asc" } },
+        },
+      });
+      if (novel) {
+        const chars = novel.characters.map((c) => `${c.name}(${c.roleType})`).join("、");
+        const sceneSummary = novel.scenes.map((s) => `场景${s.sceneNum}: ${s.location}`).join("; ");
+        systemPrompt += `\n\n当前正在改编的小说：《${novel.title}》
+小说字数：${novel.content.length} 字
+已识别角色：${chars || "暂无"}
+已有场景：${sceneSummary || "暂无"}
+${novel.analysis ? `分析结果摘要：${novel.analysis.substring(0, 500)}` : ""}`;
+      }
+    }
+
+    // 构建消息列表
+    const llmMessages: { role: string; content: string }[] = [
+      { role: "system", content: systemPrompt },
+    ];
+
+    // 添加历史消息（最近10轮）
+    const recentHistory = existingMessages.slice(-20);
+    for (const msg of recentHistory) {
+      llmMessages.push({ role: msg.role, content: msg.content });
+    }
+
+    // 添加当前用户消息
+    llmMessages.push({ role: "user", content: message });
+
+    // 发送会话信息
+    sendEvent({ type: "meta", conversationId: conversation.id, title: conversation.title });
+
+    // 保存用户消息
+    await prisma.chatMessage.create({
+      data: {
+        conversationId: conversation.id,
+        role: "user",
+        content: message,
+      },
+    });
+
+    // 调用流式 AI
+    const stream = await mimoClient.chat.completions.create({
+      model: process.env.MIMO_MODEL || "mimo-v2.5",
+      messages: llmMessages as any,
+      temperature: 0.7,
+      max_completion_tokens: 4096,
+      stream: true,
+    });
+
+    let fullResponse = "";
+
+    for await (const chunk of stream) {
+      if (aborted) break;
+      const token = chunk.choices?.[0]?.delta?.content || "";
+      if (token) {
+        fullResponse += token;
+        sendEvent({ type: "token", token });
+      }
+    }
+
+    // 保存助手回复
+    if (fullResponse) {
+      await prisma.chatMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: fullResponse,
+        },
+      });
+      await prisma.chatConversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
+    }
+
+    if (!aborted) {
+      sendEvent({ type: "done", conversationId: conversation.id });
+    }
+    res.end();
+  } catch (err: any) {
+    console.error("Chat stream error:", err.message);
+    if (!aborted) {
+      sendEvent({ type: "error", error: err.message });
+    }
+    res.end();
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
   console.log(`Mimo Model: ${process.env.MIMO_MODEL || "mimo-v2.5"}`);
