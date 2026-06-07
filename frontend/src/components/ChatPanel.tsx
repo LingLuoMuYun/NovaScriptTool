@@ -41,7 +41,7 @@ export default function ChatPanel({
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [error, setError] = useState("");
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 
@@ -64,18 +64,22 @@ export default function ChatPanel({
     }
   }, [externalTemplateId]);
 
-  // 加载会话列表
+  // 加载会话列表，自动选中最近会话
   const loadConversations = useCallback(async () => {
     setLoadingConvs(true);
     try {
       const data = await getConversations(novelId);
       setConversations(data);
+      // 自动选中最近会话（如果当前没有选中）
+      if (!activeConvId && data.length > 0) {
+        setActiveConvId(data[0].id);
+      }
     } catch {
       // ignore
     } finally {
       setLoadingConvs(false);
     }
-  }, [novelId]);
+  }, [novelId, activeConvId]);
 
   useEffect(() => {
     loadConversations();
@@ -188,41 +192,25 @@ export default function ChatPanel({
         onMeta: (meta) => {
           if (!activeConvId) {
             setActiveConvId(meta.conversationId);
-            loadConversations();
           }
         },
         onToken: (token) => {
-          streamingTextRef.current += token;
-          setStreamingText(streamingTextRef.current);
+          // 显示完整回复
+          setStreamingText(token);
         },
         onDone: (convId) => {
-          // 添加助手消息
-          const finalText = streamingTextRef.current;
-          if (finalText) {
-            const assistantMsg: ChatMessage = {
-              id: `temp-${Date.now()}-assistant`,
-              conversationId: convId,
-              role: "assistant",
-              content: finalText,
-              createdAt: new Date().toISOString(),
-            };
-            setMessages((prev) => [...prev, assistantMsg]);
-          }
+          // 从服务器重新加载消息（确保用服务端ID和时间戳）
           setStreamingText("");
-          streamingTextRef.current = "";
           setStreaming(false);
-          // 如果有模板但当前会话未标记，更新
-          if (selectedTemplate && activeConvId) {
-            setConversations((prev) =>
-              prev.map((c) =>
-                c.id === activeConvId ? { ...c, mode: "template" } : c
-              )
-            );
-          }
-          // 重新加载消息以获取服务器端 ID
           if (convId) {
+            if (!activeConvId) {
+              setActiveConvId(convId);
+            }
+            // 刷新会话列表（更新标题和时间）
+            loadConversations();
+            // 加载服务端消息
             getConversationMessages(convId)
-              .then(setMessages)
+              .then((msgs) => setMessages(msgs))
               .catch(() => {});
           }
         },
@@ -230,7 +218,6 @@ export default function ChatPanel({
           setError(errMsg);
           setStreaming(false);
           setStreamingText("");
-          streamingTextRef.current = "";
         },
       }
     );
