@@ -1850,39 +1850,32 @@ app.post("/api/chat/stream", async (req, res) => {
       });
     }
 
-    // 获取历史消息
+    // 获取历史消息（仅保留最近 3 轮=6 条，加快响应）
     const existingMessages = await prisma.chatMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "asc" },
-      take: 20,
+      take: 6,
     });
 
-    // 构建 system prompt
-    let systemPrompt: string;
-    if (templateId) {
-      const template = TEMPLATES.find((t) => t.id === templateId);
-      systemPrompt = template?.systemPrompt || TEMPLATES.find((t) => t.id === "general")!.systemPrompt;
-    } else {
-      systemPrompt = TEMPLATES.find((t) => t.id === "general")!.systemPrompt;
-    }
+    // 构建精简 system prompt（仅 3-4 句，大幅减少 token 消耗）
+    const template = templateId
+      ? TEMPLATES.find((t) => t.id === templateId)
+      : null;
+    const genreName = template?.name || "通用";
+    const temperature = template?.temperature ?? 0.65;
 
-    // 如果有关联小说，补充上下文
+    let systemPrompt = `你是 NovaScriptTool 的 AI 编剧助手（${genreName}方向）。简洁专业地回答用户关于小说改编剧本的问题。回答控制在 200 字以内，点到即止。`;
+
+    // 如果有关联小说，直接送原文片段（前 3000 字），让 AI 能从原文中提取信息
     if (novelId) {
       const novel = await prisma.novel.findUnique({
         where: { id: novelId },
-        include: {
-          characters: { take: 10 },
-          scenes: { take: 5, orderBy: { sceneNum: "asc" } },
-        },
+        include: { characters: { take: 8 } },
       });
       if (novel) {
         const chars = novel.characters.map((c) => `${c.name}(${c.roleType})`).join("、");
-        const sceneSummary = novel.scenes.map((s) => `场景${s.sceneNum}: ${s.location}`).join("; ");
-        systemPrompt += `\n\n当前正在改编的小说：《${novel.title}》
-小说字数：${novel.content.length} 字
-已识别角色：${chars || "暂无"}
-已有场景：${sceneSummary || "暂无"}
-${novel.analysis ? `分析结果摘要：${novel.analysis.substring(0, 500)}` : ""}`;
+        const contentExcerpt = novel.content.substring(0, 3000);
+        systemPrompt += `\n小说《${novel.title}》(${novel.content.length}字)，角色：${chars || "暂无"}。\n原文片段：\n${contentExcerpt}${novel.content.length > 3000 ? "\n…(后续内容省略)" : ""}`;
       }
     }
 
@@ -1891,9 +1884,8 @@ ${novel.analysis ? `分析结果摘要：${novel.analysis.substring(0, 500)}` : 
       { role: "system", content: systemPrompt },
     ];
 
-    // 添加历史消息（最近10轮）
-    const recentHistory = existingMessages.slice(-20);
-    for (const msg of recentHistory) {
+    // 添加历史消息
+    for (const msg of existingMessages) {
       llmMessages.push({ role: msg.role, content: msg.content });
     }
 
@@ -1912,12 +1904,12 @@ ${novel.analysis ? `分析结果摘要：${novel.analysis.substring(0, 500)}` : 
       },
     });
 
-    // 调用流式 AI
+    // 调用流式 AI（降低 max_tokens 和 temperature 以加快响应）
     const stream = await mimoClient.chat.completions.create({
       model: process.env.MIMO_MODEL || "mimo-v2.5",
       messages: llmMessages as any,
-      temperature: 0.7,
-      max_completion_tokens: 4096,
+      temperature,
+      max_completion_tokens: 1024,
       stream: true,
     });
 
