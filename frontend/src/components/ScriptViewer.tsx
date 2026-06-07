@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Scene, Script, updateScript } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import { Scene, Script, Annotation, updateScript, createAnnotation, updateAnnotation, deleteAnnotation, getSceneAnnotations } from "@/lib/api";
 import VersionHistory from "./VersionHistory";
+import MentionInput from "./MentionInput";
 
 interface ScriptViewerProps {
   scene: Scene & { scripts?: Script[] };
+  characterNames?: string[];
   onRollback?: () => void;
   onScriptUpdate?: () => void;
 }
@@ -19,26 +21,53 @@ interface ContentBlock {
   line?: string;
 }
 
-/** 结构化剧本渲染（只读） */
-function StructuredScriptView({ content }: { content: string }) {
-  // 尝试解析为结构化 JSON
+/** 结构化剧本渲染（只读）+ 行内评论 */
+function StructuredScriptView({
+  content,
+  sceneId,
+  annotations,
+  characters,
+  onAddComment,
+  onToggleResolved,
+  onDeleteComment,
+}: {
+  content: string;
+  sceneId: string;
+  annotations: Annotation[];
+  characters: string[];
+  onAddComment: (blockIndex: number, content: string, type: string, authorName: string) => Promise<void>;
+  onToggleResolved: (annotation: Annotation) => Promise<void>;
+  onDeleteComment: (id: string) => Promise<void>;
+}) {
+  const [activeBlockIdx, setActiveBlockIdx] = useState<number | null>(null);
+  const [commentingIdx, setCommentingIdx] = useState<number | null>(null);
+
+  // 解析结构化 JSON
   let parsed: { sceneNum?: number; location?: string; timeOfDay?: string; charactersInScene?: string[]; content?: ContentBlock[] } | null = null;
   try {
     const data = JSON.parse(content);
     if (data && Array.isArray(data.content)) {
       parsed = data;
     }
-  } catch {
-    // 不是结构化数据，降级为纯文本展示
-  }
+  } catch { /* 旧格式，降级 */ }
 
+  // 旧格式：纯文本展示
   if (!parsed || !parsed.content) {
-    // 旧格式：纯文本展示
     return (
       <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-700">
         {content}
       </pre>
     );
+  }
+
+  // 按 blockIndex 分组注记
+  const commentsByBlock = new Map<number, Annotation[]>();
+  for (const a of annotations) {
+    if (a.blockIndex != null) {
+      const existing = commentsByBlock.get(a.blockIndex) || [];
+      existing.push(a);
+      commentsByBlock.set(a.blockIndex, existing);
+    }
   }
 
   const blockStyles: Record<string, string> = {
@@ -66,61 +95,284 @@ function StructuredScriptView({ content }: { content: string }) {
 
       {/* 剧本内容块 */}
       {parsed.content.map((block, i) => {
-        switch (block.type) {
-          case "action":
-            return (
-              <p key={i} className={blockStyles.action}>
-                {block.text}
-              </p>
-            );
+        const blockComments = commentsByBlock.get(i) || [];
+        const hasComments = blockComments.length > 0;
+        const unresolvedCount = blockComments.filter((c) => !c.resolved).length;
+        const isActive = activeBlockIdx === i;
 
-          case "dialogue":
-            return (
-              <div key={i} className={blockStyles.dialogue}>
-                <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
-                    {block.character}
-                  </span>
-                  {block.emotion && (
-                    <span className="text-xs text-gray-500 italic">
-                      ({block.emotion})
+        return (
+          <div key={i} className="group relative">
+            {/* 块内容 — 有评论时高亮 */}
+            <div
+              className={`relative rounded-lg transition-colors ${
+                hasComments
+                  ? "bg-yellow-50 ring-1 ring-yellow-200 -mx-1 px-1"
+                  : "hover:bg-gray-50/50 -mx-1 px-1"
+              }`}
+            >
+              {/* 行内评论按钮 — hover 显示 */}
+              <button
+                onClick={() => {
+                  setCommentingIdx(commentingIdx === i ? null : i);
+                  if (hasComments) setActiveBlockIdx(isActive ? null : i);
+                }}
+                className={`absolute -left-9 top-0 hidden h-6 w-6 items-center justify-center rounded-full text-xs leading-none transition group-hover:flex ${
+                  hasComments
+                    ? "flex bg-yellow-400 text-white shadow-sm"
+                    : "bg-gray-200 text-gray-500 hover:bg-indigo-100 hover:text-indigo-600"
+                }`}
+                title={hasComments ? `${blockComments.length} 条评论` : "添加评论"}
+              >
+                💬
+              </button>
+
+              {/* 评论计数徽章 */}
+              {hasComments && (
+                <span
+                  onClick={() => setActiveBlockIdx(isActive ? null : i)}
+                  className="absolute -right-2 -top-2 flex h-5 min-w-[20px] cursor-pointer items-center justify-center rounded-full bg-yellow-500 px-1 text-xs font-bold text-white shadow-sm transition hover:bg-yellow-600"
+                  title={`${blockComments.length} 条评论 (${unresolvedCount} 条未解决)`}
+                >
+                  {blockComments.length}
+                </span>
+              )}
+
+              {/* 渲染块内容 */}
+              {block.type === "action" && (
+                <p className={blockStyles.action}>{block.text}</p>
+              )}
+
+              {block.type === "dialogue" && (
+                <div className={blockStyles.dialogue}>
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+                      {block.character}
                     </span>
-                  )}
+                    {block.emotion && (
+                      <span className="text-xs text-gray-500 italic">({block.emotion})</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-800 leading-relaxed">{block.line}</p>
                 </div>
-                <p className="text-sm text-gray-800 leading-relaxed">
-                  {block.line}
-                </p>
+              )}
+
+              {block.type === "transition" && (
+                <p className={blockStyles.transition}>{block.text}</p>
+              )}
+            </div>
+
+            {/* 行内评论输入 */}
+            {commentingIdx === i && (
+              <div className="mt-2 ml-4 pl-4 border-l-2 border-indigo-300 animate-fade-in">
+                <InlineCommentForm
+                  characters={characters}
+                  onSubmit={async (text, type, author) => {
+                    await onAddComment(i, text, type, author);
+                    setCommentingIdx(null);
+                  }}
+                  onCancel={() => setCommentingIdx(null)}
+                />
               </div>
-            );
+            )}
 
-          case "transition":
-            return (
-              <p key={i} className={blockStyles.transition}>
-                {block.text}
-              </p>
-            );
-
-          default:
-            return null;
-        }
+            {/* 评论线程 */}
+            {isActive && hasComments && (
+              <div className="mt-2 ml-4 space-y-2 animate-fade-in">
+                {blockComments.map((comment) => (
+                  <CommentBubble
+                    key={comment.id}
+                    comment={comment}
+                    onToggleResolved={() => onToggleResolved(comment)}
+                    onDelete={() => onDeleteComment(comment.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
       })}
 
       {/* 格式标签 */}
-      <div className="mt-4 pt-3 border-t border-gray-100">
+      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
           ✅ 结构化剧本 · {parsed.content.length} 个内容块
         </span>
+        {annotations.length > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
+            💬 {annotations.length} 条行内评论
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-export default function ScriptViewer({ scene, onRollback, onScriptUpdate }: ScriptViewerProps) {
+/** 行内评论输入表单 */
+function InlineCommentForm({
+  characters,
+  onSubmit,
+  onCancel,
+}: {
+  characters: string[];
+  onSubmit: (content: string, type: string, authorName: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [type, setType] = useState("comment");
+  const [authorName, setAuthorName] = useState("编剧");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!text.trim()) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(text.trim(), type, authorName.trim() || "匿名");
+      setText("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-indigo-200 bg-white p-3 shadow-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-medium text-gray-500">✏️ 添加评论</span>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-500"
+        >
+          <option value="comment">💬 评论</option>
+          <option value="todo">📋 待办</option>
+          <option value="question">❓ 疑问</option>
+          <option value="suggestion">💡 建议</option>
+        </select>
+        <input
+          type="text"
+          value={authorName}
+          onChange={(e) => setAuthorName(e.target.value)}
+          placeholder="署名"
+          className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-500 w-16"
+        />
+      </div>
+      <MentionInput
+        value={text}
+        onChange={setText}
+        placeholder="输入评论... 使用 @ 提及角色"
+        rows={2}
+        characters={characters}
+        autoFocus
+        onCancel={onCancel}
+        onSubmit={handleSubmit}
+        submitLabel="添加"
+        submitting={submitting}
+      />
+    </div>
+  );
+}
+
+/** 单条评论气泡 */
+function CommentBubble({
+  comment,
+  onToggleResolved,
+  onDelete,
+}: {
+  comment: Annotation;
+  onToggleResolved: () => void;
+  onDelete: () => void;
+}) {
+  const TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
+    comment: { emoji: "💬", label: "评论", color: "border-l-blue-400 bg-blue-50" },
+    todo: { emoji: "📋", label: "待办", color: "border-l-orange-400 bg-orange-50" },
+    question: { emoji: "❓", label: "疑问", color: "border-l-amber-400 bg-amber-50" },
+    suggestion: { emoji: "💡", label: "建议", color: "border-l-emerald-400 bg-emerald-50" },
+    note: { emoji: "📝", label: "笔记", color: "border-l-gray-300 bg-gray-50" },
+    inspiration: { emoji: "✨", label: "灵感", color: "border-l-yellow-400 bg-yellow-50" },
+    warning: { emoji: "⚠️", label: "警示", color: "border-l-red-400 bg-red-50" },
+  };
+  const cfg = TYPE_CONFIG[comment.type] || TYPE_CONFIG.comment;
+
+  // 高亮 @提及
+  const renderContent = (text: string) => {
+    const parts = text.split(/(@\S+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        return (
+          <span key={i} className="inline-flex items-center gap-0.5 rounded bg-indigo-100 px-1 py-0 text-xs font-medium text-indigo-700">
+            {part}
+          </span>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
+  return (
+    <div
+      className={`rounded-lg border-l-4 p-3 ${cfg.color} ${comment.resolved ? "opacity-50" : ""} transition-opacity`}
+    >
+      <div className="flex items-start gap-2">
+        {/* 类型图标 */}
+        <span className="text-sm mt-0.5">{cfg.emoji}</span>
+
+        <div className="flex-1 min-w-0">
+          {/* 头部：署名 + 时间 */}
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-gray-600">
+              {comment.authorName || "匿名"}
+            </span>
+            <span className="text-xs text-gray-300">·</span>
+            <span className="text-xs text-gray-400">
+              {new Date(comment.createdAt).toLocaleDateString("zh-CN")}{" "}
+              {new Date(comment.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            {comment.resolved && (
+              <span className="text-xs text-green-500 font-medium ml-auto">✅ 已解决</span>
+            )}
+          </div>
+
+          {/* 评论内容 */}
+          <p className={`text-sm leading-relaxed ${comment.resolved ? "line-through text-gray-400" : "text-gray-700"}`}>
+            {renderContent(comment.content)}
+          </p>
+        </div>
+
+        {/* 操作按钮 */}
+        <div className="flex flex-col gap-0.5 flex-shrink-0">
+          <button
+            onClick={onToggleResolved}
+            className={`text-xs rounded px-1.5 py-0.5 transition ${
+              comment.resolved
+                ? "bg-green-100 text-green-600 hover:bg-green-200"
+                : "bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600"
+            }`}
+            title={comment.resolved ? "标记为未解决" : "标记为已解决"}
+          >
+            {comment.resolved ? "✅" : "○"}
+          </button>
+          <button
+            onClick={onDelete}
+            className="text-xs rounded px-1.5 py-0.5 text-gray-400 hover:bg-red-100 hover:text-red-500 transition"
+            title="删除"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function ScriptViewer({ scene, characterNames = [], onRollback, onScriptUpdate }: ScriptViewerProps) {
   const [showVersions, setShowVersions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // 行内评论状态
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationLoading, setAnnotationLoading] = useState(false);
 
   const script = scene.scripts?.[0];
 
@@ -130,6 +382,72 @@ export default function ScriptViewer({ scene, onRollback, onScriptUpdate }: Scri
       setEditContent(script.yamlContent);
     }
   }, [isEditing, script]);
+
+  // 加载场景行内评论
+  const fetchAnnotations = useCallback(async () => {
+    if (!scene.id) return;
+    setAnnotationLoading(true);
+    try {
+      const data = await getSceneAnnotations(scene.id);
+      setAnnotations(data);
+    } catch (err) {
+      console.error("加载评论失败:", err);
+    } finally {
+      setAnnotationLoading(false);
+    }
+  }, [scene.id]);
+
+  useEffect(() => {
+    fetchAnnotations();
+  }, [fetchAnnotations]);
+
+  // 添加行内评论
+  const handleAddComment = useCallback(
+    async (blockIndex: number, content: string, type: string, authorName: string) => {
+      try {
+        await createAnnotation({
+          novelId: scene.novelId,
+          targetType: "block",
+          targetId: `${scene.id}:${blockIndex}`,
+          content,
+          type,
+          authorName,
+          blockIndex,
+        });
+        await fetchAnnotations();
+      } catch (err) {
+        console.error("添加评论失败:", err);
+      }
+    },
+    [scene.novelId, scene.id, fetchAnnotations]
+  );
+
+  // 切换解决状态
+  const handleToggleResolved = useCallback(
+    async (annotation: Annotation) => {
+      try {
+        await updateAnnotation(annotation.id, { resolved: !annotation.resolved });
+        await fetchAnnotations();
+      } catch (err) {
+        console.error("更新评论状态失败:", err);
+      }
+    },
+    [fetchAnnotations]
+  );
+
+  // 删除评论
+  const handleDeleteComment = useCallback(
+    async (id: string) => {
+      if (!confirm("确定删除此评论？")) return;
+      try {
+        await deleteAnnotation(id);
+        await fetchAnnotations();
+      } catch (err) {
+        console.error("删除评论失败:", err);
+      }
+    },
+    [fetchAnnotations]
+  );
 
   const handleStartEdit = () => {
     setEditError("");
@@ -318,7 +636,7 @@ export default function ScriptViewer({ scene, onRollback, onScriptUpdate }: Scri
     );
   }
 
-  // 正常只读模式
+  // 正常只读模式 — 含行内评论
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
       {/* 场景标题 */}
@@ -354,9 +672,23 @@ export default function ScriptViewer({ scene, onRollback, onScriptUpdate }: Scri
         </div>
       </div>
 
-      {/* 剧本内容 */}
+      {/* 剧本内容 + 行内评论 */}
       <div className="p-6">
-        <StructuredScriptView content={script.yamlContent} />
+        {annotationLoading ? (
+          <div className="text-center py-4">
+            <span className="text-sm text-gray-400">⏳ 加载评论中...</span>
+          </div>
+        ) : (
+          <StructuredScriptView
+            content={script.yamlContent}
+            sceneId={scene.id}
+            annotations={annotations}
+            characters={characterNames}
+            onAddComment={handleAddComment}
+            onToggleResolved={handleToggleResolved}
+            onDeleteComment={handleDeleteComment}
+          />
+        )}
       </div>
 
       {/* 时间/地点信息 */}

@@ -602,7 +602,11 @@ export default function NovelDetailPage() {
           <div className="lg:col-span-3">
             <h3 className="mb-3 text-sm font-medium text-gray-500">剧本内容</h3>
             {selectedScene ? (
-              <ScriptViewer scene={selectedScene} onScriptUpdate={handleScriptUpdate} />
+              <ScriptViewer
+                scene={selectedScene}
+                characterNames={characters.map((c) => c.name)}
+                onScriptUpdate={handleScriptUpdate}
+              />
             ) : (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
                 <p className="text-4xl">👈</p>
@@ -619,6 +623,7 @@ export default function NovelDetailPage() {
           targetType="scene"
           targetId={selectedScene?.id || ""}
           targetLabel={selectedScene ? `Scene ${selectedScene.sceneNum} - ${selectedScene.location}` : undefined}
+          characterNames={characters.map((c) => c.name)}
         />
       )}
 

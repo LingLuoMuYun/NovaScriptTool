@@ -1454,9 +1454,17 @@ app.get("/api/novels/:id/annotations", async (req, res) => {
 
 app.post("/api/annotations", async (req, res) => {
   try {
-    const { novelId, targetType, targetId, content, type } = req.body;
+    const { novelId, targetType, targetId, content, type, authorName, blockIndex } = req.body;
     const annotation = await prisma.annotation.create({
-      data: { novelId, targetType, targetId, content, type: type || "note" },
+      data: {
+        novelId,
+        targetType,
+        targetId,
+        content,
+        type: type || "note",
+        authorName: authorName || "匿名",
+        blockIndex: blockIndex ?? null,
+      },
     });
     res.status(201).json(annotation);
   } catch (err: any) {
@@ -1466,16 +1474,38 @@ app.post("/api/annotations", async (req, res) => {
 
 app.put("/api/annotations/:id", async (req, res) => {
   try {
-    const { content, type, resolved } = req.body;
+    const { content, type, resolved, authorName, blockIndex } = req.body;
+    const data: any = {};
+    if (content !== undefined) data.content = content;
+    if (type !== undefined) data.type = type;
+    if (resolved !== undefined) data.resolved = resolved;
+    if (authorName !== undefined) data.authorName = authorName;
+    if (blockIndex !== undefined) data.blockIndex = blockIndex;
+
     const annotation = await prisma.annotation.update({
       where: { id: req.params.id },
-      data: {
-        ...(content !== undefined && { content }),
-        ...(type !== undefined && { type }),
-        ...(resolved !== undefined && { resolved }),
-      },
+      data,
     });
     res.json(annotation);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 场景级注记查询（含 block 级行内评论）
+app.get("/api/scenes/:id/annotations", async (req, res) => {
+  try {
+    const scene = await prisma.scene.findUnique({ where: { id: req.params.id } });
+    if (!scene) return res.status(404).json({ error: "场景不存在" });
+
+    const annotations = await prisma.annotation.findMany({
+      where: {
+        novelId: scene.novelId,
+        targetId: { startsWith: req.params.id },
+      },
+      orderBy: [{ blockIndex: "asc" }, { createdAt: "asc" }],
+    });
+    res.json(annotations);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

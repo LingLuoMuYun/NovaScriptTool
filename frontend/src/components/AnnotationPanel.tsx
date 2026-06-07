@@ -2,21 +2,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Annotation, getAnnotations, createAnnotation, updateAnnotation, deleteAnnotation } from "@/lib/api";
+import MentionInput from "./MentionInput";
 
 interface AnnotationPanelProps {
   novelId: string;
   targetType?: string;
   targetId?: string;
   targetLabel?: string;
+  characterNames?: string[];
   onClose?: () => void;
+  hideAddForm?: boolean;
 }
 
 const TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
   todo: { emoji: "📋", label: "待办", color: "border-l-orange-400 bg-orange-50" },
   question: { emoji: "❓", label: "疑问", color: "border-l-blue-400 bg-blue-50" },
-  inspiration: { emoji: "💡", label: "灵感", color: "border-l-yellow-400 bg-yellow-50" },
+  suggestion: { emoji: "💡", label: "建议", color: "border-l-emerald-400 bg-emerald-50" },
+  comment: { emoji: "💬", label: "评论", color: "border-l-indigo-400 bg-indigo-50" },
+  inspiration: { emoji: "✨", label: "灵感", color: "border-l-yellow-400 bg-yellow-50" },
   warning: { emoji: "⚠️", label: "警示", color: "border-l-red-400 bg-red-50" },
-  note: { emoji: "💬", label: "笔记", color: "border-l-gray-300 bg-gray-50" },
+  note: { emoji: "📝", label: "笔记", color: "border-l-gray-300 bg-gray-50" },
 };
 
 const TYPE_OPTIONS = Object.entries(TYPE_CONFIG).map(([value, cfg]) => ({
@@ -24,13 +29,41 @@ const TYPE_OPTIONS = Object.entries(TYPE_CONFIG).map(([value, cfg]) => ({
   label: `${cfg.emoji} ${cfg.label}`,
 }));
 
-export default function AnnotationPanel({ novelId, targetType, targetId, targetLabel, onClose }: AnnotationPanelProps) {
+/** 高亮 @提及 的文本渲染 */
+function renderContent(text: string) {
+  const parts = text.split(/(@\S+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("@")) {
+      return (
+        <span
+          key={i}
+          className="inline-flex items-center rounded bg-indigo-100 px-1 py-0 text-xs font-medium text-indigo-700"
+        >
+          {part}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+export default function AnnotationPanel({
+  novelId,
+  targetType,
+  targetId,
+  targetLabel,
+  characterNames = [],
+  onClose,
+  hideAddForm = false,
+}: AnnotationPanelProps) {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [newContent, setNewContent] = useState("");
   const [newType, setNewType] = useState("note");
+  const [authorName, setAuthorName] = useState("编剧");
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"all" | "unresolved">("all");
 
   const fetchAnnotations = useCallback(async () => {
     try {
@@ -47,9 +80,13 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
     fetchAnnotations();
   }, [fetchAnnotations]);
 
-  const filtered = filter === "all"
-    ? annotations
-    : annotations.filter((a) => a.targetType === filter || a.type === filter);
+  let filtered = viewMode === "unresolved"
+    ? annotations.filter((a) => !a.resolved)
+    : annotations;
+
+  if (filter !== "all") {
+    filtered = filtered.filter((a) => a.targetType === filter || a.type === filter);
+  }
 
   const handleAdd = async () => {
     if (!newContent.trim()) return;
@@ -61,6 +98,7 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
         targetId: targetId || "",
         content: newContent.trim(),
         type: newType,
+        authorName: authorName.trim() || "匿名",
       });
       setNewContent("");
       await fetchAnnotations();
@@ -90,12 +128,19 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
     }
   };
 
+  const unresolvedCount = annotations.filter((a) => !a.resolved).length;
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
       {/* 头部 */}
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <h3 className="text-sm font-semibold text-gray-700">
           💬 注记 ({annotations.length})
+          {unresolvedCount > 0 && (
+            <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+              {unresolvedCount} 条未解决
+            </span>
+          )}
         </h3>
         {onClose && (
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-sm">
@@ -104,8 +149,9 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
         )}
       </div>
 
-      {/* 筛选 */}
-      <div className="flex gap-1 border-b border-gray-100 px-3 py-2">
+      {/* 筛选行 */}
+      <div className="flex flex-wrap items-center gap-1 border-b border-gray-100 px-3 py-2">
+        {/* 类型筛选 */}
         <button
           onClick={() => setFilter("all")}
           className={`rounded px-2 py-0.5 text-xs transition ${
@@ -125,6 +171,26 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
             {cfg.emoji}
           </button>
         ))}
+
+        <span className="mx-1 text-gray-200">|</span>
+
+        {/* 状态筛选 */}
+        <button
+          onClick={() => setViewMode("all")}
+          className={`rounded px-2 py-0.5 text-xs transition ${
+            viewMode === "all" ? "bg-gray-200 text-gray-700" : "text-gray-500 hover:bg-gray-100"
+          }`}
+        >
+          全部
+        </button>
+        <button
+          onClick={() => setViewMode("unresolved")}
+          className={`rounded px-2 py-0.5 text-xs transition ${
+            viewMode === "unresolved" ? "bg-amber-100 text-amber-700" : "text-gray-500 hover:bg-gray-100"
+          }`}
+        >
+          ⚠️ 未解决
+        </button>
       </div>
 
       {/* 目标信息 */}
@@ -137,33 +203,56 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
       )}
 
       {/* 注记列表 */}
-      <div className="max-h-64 overflow-y-auto px-2 py-2">
+      <div className="max-h-[50vh] overflow-y-auto px-3 py-2">
         {loading ? (
           <p className="py-4 text-center text-xs text-gray-400">加载中...</p>
         ) : filtered.length === 0 ? (
-          <p className="py-4 text-center text-xs text-gray-400">暂无注记</p>
+          <p className="py-6 text-center text-xs text-gray-400">
+            {viewMode === "unresolved" ? "✅ 所有注记已解决" : "💭 暂无注记 — 点击剧本块左侧 💬 图标添加行内评论"}
+          </p>
         ) : (
           <div className="space-y-2">
             {filtered.map((a) => {
               const cfg = TYPE_CONFIG[a.type] || TYPE_CONFIG.note;
+              const isBlockComment = a.targetType === "block";
               return (
                 <div
                   key={a.id}
-                  className={`rounded-lg border-l-4 p-3 ${cfg.color} ${a.resolved ? "opacity-50" : ""}`}
+                  className={`rounded-lg border-l-4 p-3 ${cfg.color} ${a.resolved ? "opacity-50" : ""} transition`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-xs">{cfg.emoji}</span>
                         <span className="text-xs text-gray-400">
-                          {a.targetType === "scene" ? "场景" : a.targetType === "character" ? "角色" : "台词"}
+                          {isBlockComment
+                            ? "📍 行内评论"
+                            : a.targetType === "scene"
+                            ? "场景"
+                            : a.targetType === "character"
+                            ? "角色"
+                            : "台词"}
                         </span>
+                        {a.blockIndex != null && (
+                          <span className="text-xs text-gray-400 font-mono">
+                            Block #{a.blockIndex}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-300">
                           {new Date(a.createdAt).toLocaleDateString("zh-CN")}
                         </span>
+                        {a.authorName && (
+                          <span className="text-xs font-medium text-gray-500">
+                            — {a.authorName}
+                          </span>
+                        )}
                       </div>
-                      <p className={`text-sm whitespace-pre-wrap ${a.resolved ? "line-through" : ""}`}>
-                        {a.content}
+                      <p
+                        className={`text-sm whitespace-pre-wrap ${
+                          a.resolved ? "line-through" : ""
+                        }`}
+                      >
+                        {renderContent(a.content)}
                       </p>
                     </div>
                     <div className="flex flex-col gap-1">
@@ -195,35 +284,41 @@ export default function AnnotationPanel({ novelId, targetType, targetId, targetL
       </div>
 
       {/* 新增注记 */}
-      <div className="border-t border-gray-100 px-3 py-3">
-        <textarea
-          value={newContent}
-          onChange={(e) => setNewContent(e.target.value)}
-          placeholder={targetLabel ? `为「${targetLabel}」添加注记...` : "添加注记..."}
-          rows={2}
-          className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
-        />
-        <div className="mt-2 flex items-center justify-between">
-          <select
-            value={newType}
-            onChange={(e) => setNewType(e.target.value)}
-            className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600"
-          >
-            {TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleAdd}
-            disabled={submitting || !newContent.trim()}
-            className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition"
-          >
-            {submitting ? "..." : "添加"}
-          </button>
+      {!hideAddForm && (
+        <div className="border-t border-gray-100 px-3 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="text"
+              value={authorName}
+              onChange={(e) => setAuthorName(e.target.value)}
+              placeholder="署名"
+              className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600 w-20"
+            />
+            <select
+              value={newType}
+              onChange={(e) => setNewType(e.target.value)}
+              className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600"
+            >
+              {TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <MentionInput
+            value={newContent}
+            onChange={setNewContent}
+            placeholder={targetLabel ? `为「${targetLabel}」添加注记... 使用 @ 提及角色` : "添加注记... 使用 @ 提及角色"}
+            rows={2}
+            characters={characterNames}
+            onCancel={undefined}
+            onSubmit={handleAdd}
+            submitLabel="添加"
+            submitting={submitting}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 }

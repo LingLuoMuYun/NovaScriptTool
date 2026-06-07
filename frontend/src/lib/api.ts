@@ -88,6 +88,8 @@ export interface Annotation {
   content: string;
   type: string;
   resolved: boolean;
+  authorName: string;
+  blockIndex?: number | null;
   createdAt: string;
 }
 
@@ -228,19 +230,25 @@ export function getAnnotations(novelId: string): Promise<Annotation[]> {
   return request(`/api/novels/${novelId}/annotations`);
 }
 
+export function getSceneAnnotations(sceneId: string): Promise<Annotation[]> {
+  return request(`/api/scenes/${sceneId}/annotations`);
+}
+
 export function createAnnotation(data: {
   novelId: string;
   targetType: string;
   targetId: string;
   content: string;
   type?: string;
+  authorName?: string;
+  blockIndex?: number;
 }): Promise<Annotation> {
   return request("/api/annotations", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function updateAnnotation(
   id: string,
-  data: { content?: string; type?: string; resolved?: boolean }
+  data: { content?: string; type?: string; resolved?: boolean; authorName?: string; blockIndex?: number }
 ): Promise<Annotation> {
   return request(`/api/annotations/${id}`, { method: "PUT", body: JSON.stringify(data) });
 }

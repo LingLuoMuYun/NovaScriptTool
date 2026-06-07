@@ -79,6 +79,8 @@ model Annotation {
   content    String
   type       String   @default("note")
   resolved   Boolean  @default(false)
+  authorName String   @default("匿名") @map("author_name")
+  blockIndex Int?     @map("block_index")
   createdAt  DateTime @default(now()) @map("created_at")
 
   novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
