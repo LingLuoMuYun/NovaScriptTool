@@ -58,6 +58,25 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
     }
   }, [title]);
 
+  // Electron 原生文件对话框
+  const isElectron = typeof window !== "undefined" && window.electronAPI?.getAppInfo()?.isElectron;
+
+  const handleElectronOpenFile = useCallback(async () => {
+    if (!window.electronAPI) return;
+    setError("");
+    const result = await window.electronAPI.openFile();
+    if (!result) return; // 用户取消
+    if ("error" in result && result.error) {
+      setError(result.error);
+      return;
+    }
+    if ("content" in result && result.content) {
+      setContent(result.content);
+      if (!title) setTitle((result.fileName || "").replace(/\.[^.]+$/, ""));
+      setFile(null); // 使用 content 而非 file 提交
+    }
+  }, [title]);
+
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-sm dark:shadow-gray-950/30">
       <h2 className="mb-4 text-lg font-semibold text-gray-800 dark:text-gray-100">📥 上传小说</h2>
@@ -94,6 +113,18 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
         placeholder="小说标题（选填）"
         className="mb-4 w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
+
+      {/* Electron 原生文件选择 */}
+      {isElectron && mode === "file" && (
+        <button
+          onClick={handleElectronOpenFile}
+          className="mb-3 w-full rounded-lg border-2 border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950 px-4 py-3 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition flex items-center justify-center gap-2"
+        >
+          <span className="text-lg">📂</span>
+          <span>从本地文件系统选择小说文件</span>
+          <span className="text-xs text-indigo-400">(.txt / .md / .json)</span>
+        </button>
+      )}
 
       {/* 文件上传区 */}
       {mode === "file" && (

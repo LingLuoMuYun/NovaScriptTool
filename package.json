@@ -1,0 +1,66 @@
+{
+  "name": "novascript-tool",
+  "version": "1.0.0",
+  "description": "AI 驱动的小说转剧本创作辅助系统",
+  "main": "electron/main.js",
+  "author": "NovaScriptTool",
+  "license": "MIT",
+  "scripts": {
+    "electron:dev": "electron .",
+    "electron:build": "npm run build:frontend && npm run build:backend && electron-builder",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "postinstall": "cd frontend && npm install && cd ../backend && npm install"
+  },
+  "build": {
+    "appId": "com.novascript.tool",
+    "productName": "NovaScriptTool",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/.next/**/*",
+      "frontend/public/**/*",
+      "frontend/next.config.js",
+      "frontend/package.json",
+      "frontend/node_modules/**/*",
+      "backend/dist/**/*",
+      "backend/prisma/**/*",
+      "backend/package.json",
+      "backend/node_modules/**/*",
+      "backend/.env"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["**/*", "!node_modules/.cache", "!src"]
+      },
+      {
+        "from": "frontend",
+        "to": "frontend",
+        "filter": ["**/*", "!node_modules/.cache", "!src"]
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "frontend/public/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": ["dmg"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
