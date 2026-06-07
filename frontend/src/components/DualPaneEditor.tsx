@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Script, updateScript } from "@/lib/api";
+import ScriptBlockEditor from "./ScriptBlockEditor";
 
 interface DualPaneEditorProps {
   /** 场景 ID */
@@ -265,24 +266,24 @@ export default function DualPaneEditor({
           </div>
         </div>
 
-        {/* 右栏：剧本编辑器 */}
+        {/* 右栏：结构化剧本编辑器 */}
         <div
           className="flex flex-col overflow-hidden bg-white dark:bg-gray-900"
           style={{ width: `${100 - splitRatio}%` }}
         >
           <div className="flex items-center justify-between px-4 py-1.5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              ✍️ 剧本编辑
+              ✍️ 结构化编辑
             </span>
-            <span className="text-xs text-gray-300 dark:text-gray-600">JSON 格式</span>
+            <span className="text-xs text-gray-300 dark:text-gray-600">表单模式</span>
           </div>
-          <textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            className="flex-1 resize-none border-0 px-4 py-3 font-mono text-sm leading-relaxed text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 focus:outline-none focus:ring-0"
-            placeholder='{"sceneNum": 1, "content": [...]}'
-            spellCheck={false}
-          />
+          <div className="flex-1 overflow-hidden">
+            <ScriptBlockEditor
+              value={editContent}
+              onChange={setEditContent}
+              characterNames={characterNames}
+            />
+          </div>
           {error && (
             <p className="px-4 py-2 text-sm text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950 flex-shrink-0">
               ❌ {error}

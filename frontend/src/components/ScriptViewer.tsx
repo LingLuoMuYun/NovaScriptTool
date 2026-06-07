@@ -5,6 +5,7 @@ import { Scene, Script, Annotation, updateScript, createAnnotation, updateAnnota
 import VersionHistory from "./VersionHistory";
 import MentionInput from "./MentionInput";
 import DualPaneEditor from "./DualPaneEditor";
+import ScriptBlockEditor from "./ScriptBlockEditor";
 
 interface ScriptViewerProps {
   scene: Scene & { scripts?: Script[] };
@@ -615,7 +616,7 @@ export default function ScriptViewer({ scene, characterNames = [], novelContent,
     );
   }
 
-  // 编辑模式
+  // 编辑模式（结构化编辑器）
   if (isEditing) {
     return (
       <div className="rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-950/30 ring-2 ring-indigo-100">
@@ -625,7 +626,7 @@ export default function ScriptViewer({ scene, characterNames = [], novelContent,
               <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 Scene {scene.sceneNum} — {scene.location}
               </h3>
-              <p className="text-sm text-indigo-500 dark:text-indigo-400">✏️ 编辑模式 — 保存后将创建新版本</p>
+              <p className="text-sm text-indigo-500 dark:text-indigo-400">✏️ 快速编辑 — 保存后将创建新版本</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -637,18 +638,16 @@ export default function ScriptViewer({ scene, characterNames = [], novelContent,
             </div>
           </div>
         </div>
-        <div className="p-4">
-          <textarea
+        <div className="p-4" style={{ maxHeight: "calc(100vh - 280px)", overflow: "auto" }}>
+          <ScriptBlockEditor
             value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            rows={20}
-            className="w-full resize-y rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 font-mono text-sm leading-relaxed text-gray-700 dark:text-gray-200 focus:border-indigo-400 focus:outline-none transition"
-            spellCheck={false}
+            onChange={setEditContent}
+            characterNames={characterNames}
           />
           {editError && (
             <p className="mt-2 text-sm text-red-500 dark:text-red-400">{editError}</p>
           )}
-          <div className="mt-3 flex items-center justify-between">
+          <div className="mt-3 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-3">
             <p className="text-xs text-gray-400 dark:text-gray-500">
               当前版本: v{script.version} — 保存后将创建 v{script.version + 1}
             </p>
