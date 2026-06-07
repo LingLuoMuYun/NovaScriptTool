@@ -188,8 +188,11 @@ export default function NovelDetailPage() {
     }
   };
 
-  const handleExport = () => {
-    window.open(`${API_BASE}/api/novels/${id}/export`, "_blank");
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const handleExport = (format: "yaml" | "fdx" | "fountain") => {
+    setShowExportMenu(false);
+    window.open(`${API_BASE}/api/novels/${id}/export?format=${format}`, "_blank");
   };
 
   const handleBuildDeps = async () => {
@@ -451,14 +454,44 @@ export default function NovelDetailPage() {
           </>
         )}
 
-        {/* 导出 YAML */}
+        {/* 多格式导出下拉菜单 */}
         {scenes.length > 0 && (
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 rounded-xl bg-gray-800 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-gray-900"
-          >
-            📥 导出 YAML
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-800 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-gray-900"
+            >
+              📥 导出剧本
+              <svg className={`h-4 w-4 transition ${showExportMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-gray-200 bg-white shadow-lg z-50 py-1">
+                {[
+                  { format: "yaml" as const, label: "YAML", icon: "📄", desc: "结构化 YAML，人类可读" },
+                  { format: "fdx" as const, label: "Final Draft (.fdx)", icon: "🎬", desc: "导入 Final Draft 专业编剧软件" },
+                  { format: "fountain" as const, label: "Fountain", icon: "📝", desc: "纯文本剧本格式，广泛兼容" },
+                ].map((opt) => (
+                  <button
+                    key={opt.format}
+                    onClick={() => handleExport(opt.format)}
+                    className="w-full px-4 py-2.5 text-left hover:bg-gray-50 transition flex items-start gap-3"
+                  >
+                    <span className="text-lg mt-0.5">{opt.icon}</span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">{opt.label}</p>
+                      <p className="text-xs text-gray-400">{opt.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 点击外部关闭下拉 */}
+            {showExportMenu && (
+              <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+            )}
+          </div>
         )}
 
         {genError && (

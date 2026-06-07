@@ -409,7 +409,7 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
   }
 });
 
-// --- YAML 导出 ---
+// --- 多格式导出 ---
 
 app.get("/api/novels/:id/export", async (req, res) => {
   try {
@@ -419,45 +419,122 @@ app.get("/api/novels/:id/export", async (req, res) => {
     });
     if (!novel) return res.status(404).json({ error: "小说不存在" });
 
-    // 构建完整 YAML
-    let yaml = "";
-    yaml += `# ==========================================\n`;
-    yaml += `# 剧本: ${novel.title}\n`;
-    yaml += `# 生成时间: ${new Date().toISOString()}\n`;
-    yaml += `# 场景总数: ${novel.scenes.length}\n`;
-    yaml += `# ==========================================\n\n`;
-
-    if (novel.scenes.length === 0) {
-      yaml += "# ⚠️ 暂未生成场景剧本，请先运行分析流水线\n";
+    const format = (req.query.format as string) || "yaml";
+    const validFormats = ["yaml", "fdx", "fountain"];
+    if (!validFormats.includes(format)) {
+      return res.status(400).json({ error: `不支持的导出格式: ${format}，可选: ${validFormats.join(", ")}` });
     }
 
-    for (const scene of novel.scenes) {
-      const script = scene.scripts?.[0];
-      yaml += `---\n`;
-      yaml += `# Scene ${scene.sceneNum}: ${scene.location} | ${scene.timeOfDay}\n`;
-      yaml += `scene:\n`;
-      yaml += `  number: ${scene.sceneNum}\n`;
-      yaml += `  location: "${scene.location}"\n`;
-      yaml += `  time_of_day: "${scene.timeOfDay}"\n`;
+    const { exportNovel, getContentType, getFileExtension } = await import("./services/export.service");
 
-      if (script) {
-        yaml += `\n`;
-        yaml += script.yamlContent;
-        yaml += `\n`;
-      } else {
-        yaml += `  script: |\n`;
-        yaml += `    # 未生成\n`;
-      }
-      yaml += `\n`;
-    }
+    const exportData = {
+      title: novel.title,
+      scenes: novel.scenes.map((s) => ({
+        sceneNum: s.sceneNum,
+        location: s.location,
+        timeOfDay: s.timeOfDay,
+        yamlContent: s.scripts[0]?.yamlContent || "",
+      })),
+    };
 
-    res.setHeader("Content-Type", "text/yaml; charset=utf-8");
+    const output = exportNovel(exportData, format as any);
+    const contentType = getContentType(format as any);
+    const ext = getFileExtension(format as any);
+
+    res.setHeader("Content-Type", contentType);
     const safeName = novel.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
+    const formatLabel = format === "yaml" ? "剧本" : format === "fdx" ? "FinalDraft" : "Fountain";
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}_%E5%89%A7%E6%9C%AC.yaml`
+      `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}_${formatLabel}${ext}`
     );
-    res.send(yaml);
+    res.send(output);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Schema 校验 ---
+
+app.get("/api/novels/:id/validate", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { scenes: { include: { scripts: true }, orderBy: { sceneNum: "asc" } } },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    const { validateScript, parseLegacyScript } = await import("./schemas/script.schema");
+
+    const results: any[] = [];
+    let validCount = 0;
+    let structuredCount = 0;
+    let legacyCount = 0;
+
+    for (const scene of novel.scenes) {
+      const yamlContent = scene.scripts[0]?.yamlContent || "";
+      if (!yamlContent) {
+        results.push({ sceneNum: scene.sceneNum, status: "empty", errors: ["无剧本内容"] });
+        continue;
+      }
+
+      // 判断是否为结构化数据
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(yamlContent);
+      } catch {
+        // 旧格式自由文本
+        legacyCount++;
+        const legacyResult = parseLegacyScript(yamlContent);
+        results.push({
+          sceneNum: scene.sceneNum,
+          status: legacyResult ? "legacy_parsed" : "legacy_unparseable",
+          format: "legacy_text",
+          hasContent: !!legacyResult,
+          warnings: legacyResult ? ["旧格式文本，已尽力解析，导出时可能丢失部分信息"] : ["无法解析旧格式文本"],
+        });
+        continue;
+      }
+
+      if (parsed && typeof parsed === "object" && "content" in (parsed as any)) {
+        structuredCount++;
+        const validation = validateScript(parsed);
+        if (validation.valid) {
+          validCount++;
+          results.push({
+            sceneNum: scene.sceneNum,
+            status: "valid",
+            format: "structured",
+            characterCount: validation.script!.charactersInScene.length,
+            blockCount: validation.script!.content.length,
+          });
+        } else {
+          results.push({
+            sceneNum: scene.sceneNum,
+            status: "invalid",
+            format: "structured",
+            errors: validation.errors,
+          });
+        }
+      } else {
+        legacyCount++;
+        results.push({
+          sceneNum: scene.sceneNum,
+          status: "legacy_parsed",
+          format: "legacy_json_no_content",
+          warnings: ["JSON 格式但缺少 content 数组，视为旧格式"],
+        });
+      }
+    }
+
+    res.json({
+      totalScenes: novel.scenes.length,
+      validCount,
+      structuredCount,
+      legacyCount,
+      invalidCount: structuredCount - validCount,
+      results,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -861,7 +938,7 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
     });
     if (!novel) return res.status(404).json({ error: "小说不存在" });
 
-    const { writeScript } = await import("./services/ai.service");
+    const { writeScriptWithRetry } = await import("./services/ai.service");
 
     // 获取指定场景（含剧本内容用于提取在场景角色）
     const targetScenes = await prisma.scene.findMany({
@@ -900,13 +977,12 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
       const charsForAI = sceneChars.slice(0, 5);
 
       console.log(`  ✍️ 增量生成场景 ${scene.sceneNum}... (${charsForAI.map(c => c.name).join(", ") || "无匹配角色"})`);
-      const scriptResponse = await writeScript(
+      const { scriptJson, validated } = await writeScriptWithRetry(
         { sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
         charsForAI.length > 0 ? charsForAI : characters.slice(0, 2)
       );
 
-      const { parseAIJson } = await import("./services/ai.service");
-      const scriptData = parseAIJson(scriptResponse.content);
+      const newScriptContent = scriptJson;
 
       // 获取最新版本号
       const latest = await prisma.script.findFirst({
@@ -918,7 +994,7 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
       const newScript = await prisma.script.create({
         data: {
           sceneId: scene.id,
-          yamlContent: scriptData.script || JSON.stringify(scriptData),
+          yamlContent: newScriptContent,
           version: nextVersion,
           createdBy: "system",
           parentVersionId: latest?.id || null,
@@ -980,7 +1056,7 @@ app.get("/api/novels/:id/incremental-pipeline-stream", async (req, res) => {
       return res.end();
     }
 
-    const { writeScript, parseAIJson } = await import("./services/ai.service");
+    const { writeScriptWithRetry } = await import("./services/ai.service");
 
     const targetScenes = await prisma.scene.findMany({
       where: { novelId: req.params.id, sceneNum: { in: sceneNums }, isLocked: false },
@@ -1017,11 +1093,11 @@ app.get("/api/novels/:id/incremental-pipeline-stream", async (req, res) => {
         }
         const charsForAI = sceneChars.slice(0, 5);
 
-        const scriptResponse = await writeScript(
+        const { scriptJson, validated } = await writeScriptWithRetry(
           { sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
           charsForAI.length > 0 ? charsForAI : characters.slice(0, 2)
         );
-        const scriptData = parseAIJson(scriptResponse.content);
+        const newScriptContent = scriptJson;
 
         const latest = await prisma.script.findFirst({
           where: { sceneId: scene.id },
@@ -1032,7 +1108,7 @@ app.get("/api/novels/:id/incremental-pipeline-stream", async (req, res) => {
         const newScript = await prisma.script.create({
           data: {
             sceneId: scene.id,
-            yamlContent: scriptData.script || JSON.stringify(scriptData),
+            yamlContent: newScriptContent,
             version: nextVersion,
             createdBy: "system",
             parentVersionId: latest?.id || null,

@@ -187,7 +187,7 @@ export async function planScenes(novelContent: string, characters: any[]) {
   );
 }
 
-/** Agent 4: 剧本主笔 — 生成场景剧本 YAML */
+/** Agent 4: 剧本主笔 — 生成场景结构化剧本 */
 export async function writeScript(
   sceneInfo: any,
   charactersInScene: any[]
@@ -201,19 +201,27 @@ export async function writeScript(
 在场角色档案：
 ${JSON.stringify(charactersInScene)}
 
-输出要求：
-- 严格按照标准剧本格式
-- 包含动作指示（Action）
-- 包含角色对白（Dialogue），对话需符合角色性格
-- 包含情绪/语气标注
-
-请以 JSON 输出，格式如下：
+输出格式要求（必须严格遵循 JSON Schema）：
 {
   "sceneNum": ${sceneInfo.sceneNum},
   "location": "${sceneInfo.location}",
   "timeOfDay": "${sceneInfo.timeOfDay}",
-  "script": "[Scene ${sceneInfo.sceneNum} - ${sceneInfo.location} - ${sceneInfo.timeOfDay}]\\n\\n[Action]...\\n\\n[Dialogue]\\n角色名（情绪）: 对白..."
-}`,
+  "indoor": ${sceneInfo.indoor ?? true},
+  "charactersInScene": ["角色名1", "角色名2"],
+  "content": [
+    { "type": "action", "text": "动作描述，描写场景发生了什么。" },
+    { "type": "dialogue", "character": "角色名", "emotion": "情绪", "line": "对白内容" },
+    { "type": "transition", "text": "CUT TO:" }
+  ]
+}
+
+规则（非常重要）：
+- content 数组按剧本时间顺序排列，action 和 dialogue 交替出现，比例约 1:1
+- dialogue 的 emotion 标注角色语气（愤怒/悲伤/平静/焦急/兴奋/冷漠/...）
+- 场景结尾必须有 transition（CUT TO: / FADE OUT. / DISSOLVE TO: / SMASH CUT:）
+- charactersInScene 必须是本场景实际出场角色名
+- 每个 content 元素必须包含 type 字段，值为 "action" / "dialogue" / "transition" 三者之一
+- dialogue 必须包含 character 和 line 字段；emotion 可选`,
       },
       {
         role: "user",
@@ -222,6 +230,80 @@ ${JSON.stringify(charactersInScene)}
     ],
     { responseFormat: "json_object" }
   );
+}
+
+/** Agent 4 带 Schema 校验的重试包装 */
+export async function writeScriptWithRetry(
+  sceneInfo: any,
+  charactersInScene: any[],
+  maxRetries: number = 3
+): Promise<{ scriptJson: string; retries: number; validated: boolean }> {
+  const { ScriptSchema } = await import("../schemas/script.schema");
+
+  let lastError = "";
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await writeScript(
+        attempt === 0 ? sceneInfo : { ...sceneInfo, _retryHint: lastError },
+        charactersInScene
+      );
+      const data = parseAIJson(response.content);
+
+      // 如果 AI 返回的仍是旧格式（含 script 字段），尝试转换
+      let candidate = data;
+      if (data.script && !data.content) {
+        // 旧格式回退：尝试从 script 文本中提取结构化内容
+        candidate = {
+          sceneNum: data.sceneNum || sceneInfo.sceneNum,
+          location: data.location || sceneInfo.location,
+          timeOfDay: data.timeOfDay || sceneInfo.timeOfDay,
+          indoor: data.indoor ?? sceneInfo.indoor ?? true,
+          charactersInScene: data.charactersInScene || charactersInScene.map((c: any) => c.name),
+          content: [
+            { type: "action", text: data.script },
+            { type: "transition", text: "CUT TO:" },
+          ],
+        };
+      }
+
+      const result = ScriptSchema.safeParse(candidate);
+
+      if (result.success) {
+        return {
+          scriptJson: JSON.stringify(result.data),
+          retries: attempt,
+          validated: true,
+        };
+      }
+
+      // 校验失败，记录错误用于重试
+      lastError = result.error.issues
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ");
+      console.log(`  ⚠️ 场景 ${sceneInfo.sceneNum} Schema 校验失败 (第${attempt + 1}次): ${lastError.substring(0, 120)}...`);
+    } catch (err: any) {
+      lastError = err.message || "未知解析错误";
+      console.log(`  ⚠️ 场景 ${sceneInfo.sceneNum} 解析失败 (第${attempt + 1}次): ${lastError.substring(0, 100)}`);
+    }
+  }
+
+  // 所有重试失败，返回占位剧本
+  console.log(`  ❌ 场景 ${sceneInfo.sceneNum} 校验重试 ${maxRetries} 次均失败，使用占位剧本`);
+  return {
+    scriptJson: JSON.stringify({
+      sceneNum: sceneInfo.sceneNum,
+      location: sceneInfo.location,
+      timeOfDay: sceneInfo.timeOfDay,
+      indoor: sceneInfo.indoor ?? true,
+      charactersInScene: charactersInScene.map((c: any) => c.name).slice(0, 5),
+      content: [
+        { type: "action", text: `⚠️ 该场景AI生成未通过Schema校验，请手动编辑。错误: ${lastError.substring(0, 200)}` },
+        { type: "transition", text: "CUT TO:" },
+      ],
+    }),
+    retries: maxRetries,
+    validated: false,
+  };
 }
 
 // --- JSON 解析工具 ---
@@ -573,15 +655,18 @@ export async function runScriptGenerationPipeline(
 
     console.log(`  ✍️ Agent 4: 生成场景 ${scene.sceneNum} 剧本...`);
     try {
-      const scriptResponse = await writeScript(scene, sceneChars);
-      const scriptData = parseAIJson(scriptResponse.content);
-      console.log(`  ✅ 场景 ${scene.sceneNum} 剧本完成`);
+      const { scriptJson, retries, validated } = await writeScriptWithRetry(scene, sceneChars, 3);
+      if (retries > 0) {
+        console.log(`  ✅ 场景 ${scene.sceneNum} 剧本完成 (${retries} 次重试, ${validated ? "✅ 校验通过" : "⚠️ 校验未通过"})`);
+      } else {
+        console.log(`  ✅ 场景 ${scene.sceneNum} 剧本完成 ✅ 校验通过`);
+      }
 
       scripts.push({
         sceneNum: scene.sceneNum,
         location: scene.location,
         timeOfDay: scene.timeOfDay,
-        scriptYaml: scriptData.script || JSON.stringify(scriptData),
+        scriptYaml: scriptJson,
       });
     } catch (err: any) {
       const msg = err.message || "";
@@ -591,7 +676,17 @@ export async function runScriptGenerationPipeline(
           sceneNum: scene.sceneNum,
           location: scene.location,
           timeOfDay: scene.timeOfDay,
-          scriptYaml: `# ⚠️ 该场景因内容安全审核未通过，未能生成剧本\n# 请尝试缩短原文章节后重试\nscene:\n  number: ${scene.sceneNum}\n  location: "${scene.location}"\n  time_of_day: "${scene.timeOfDay}"\n  script: "# 待生成"\n`,
+          scriptYaml: JSON.stringify({
+            sceneNum: scene.sceneNum,
+            location: scene.location,
+            timeOfDay: scene.timeOfDay,
+            indoor: scene.indoor !== false,
+            charactersInScene: sceneChars.map((c: any) => c.name).slice(0, 5),
+            content: [
+              { type: "action", text: "⚠️ 该场景因内容安全审核未通过，未能生成剧本。请尝试缩短原文章节后重试。" },
+              { type: "transition", text: "CUT TO:" },
+            ],
+          }),
         });
       } else {
         throw err;

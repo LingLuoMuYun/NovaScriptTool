@@ -10,6 +10,111 @@ interface ScriptViewerProps {
   onScriptUpdate?: () => void;
 }
 
+/** 剧本内容块类型 */
+interface ContentBlock {
+  type: "action" | "dialogue" | "transition";
+  text?: string;
+  character?: string;
+  emotion?: string;
+  line?: string;
+}
+
+/** 结构化剧本渲染（只读） */
+function StructuredScriptView({ content }: { content: string }) {
+  // 尝试解析为结构化 JSON
+  let parsed: { sceneNum?: number; location?: string; timeOfDay?: string; charactersInScene?: string[]; content?: ContentBlock[] } | null = null;
+  try {
+    const data = JSON.parse(content);
+    if (data && Array.isArray(data.content)) {
+      parsed = data;
+    }
+  } catch {
+    // 不是结构化数据，降级为纯文本展示
+  }
+
+  if (!parsed || !parsed.content) {
+    // 旧格式：纯文本展示
+    return (
+      <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-700">
+        {content}
+      </pre>
+    );
+  }
+
+  const blockStyles: Record<string, string> = {
+    action: "text-gray-700 text-sm leading-relaxed mb-3",
+    dialogue: "mb-4 pl-8 border-l-4 border-indigo-200",
+    transition: "text-gray-500 text-xs font-semibold tracking-wider uppercase text-right mb-4",
+  };
+
+  return (
+    <div className="space-y-1">
+      {/* 场景信息栏 */}
+      {parsed.charactersInScene && parsed.charactersInScene.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2">
+          <span className="text-xs font-medium text-indigo-500">👥 出场角色：</span>
+          {parsed.charactersInScene.map((name, i) => (
+            <span
+              key={i}
+              className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700"
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 剧本内容块 */}
+      {parsed.content.map((block, i) => {
+        switch (block.type) {
+          case "action":
+            return (
+              <p key={i} className={blockStyles.action}>
+                {block.text}
+              </p>
+            );
+
+          case "dialogue":
+            return (
+              <div key={i} className={blockStyles.dialogue}>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+                    {block.character}
+                  </span>
+                  {block.emotion && (
+                    <span className="text-xs text-gray-500 italic">
+                      ({block.emotion})
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-800 leading-relaxed">
+                  {block.line}
+                </p>
+              </div>
+            );
+
+          case "transition":
+            return (
+              <p key={i} className={blockStyles.transition}>
+                {block.text}
+              </p>
+            );
+
+          default:
+            return null;
+        }
+      })}
+
+      {/* 格式标签 */}
+      <div className="mt-4 pt-3 border-t border-gray-100">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+          ✅ 结构化剧本 · {parsed.content.length} 个内容块
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function ScriptViewer({ scene, onRollback, onScriptUpdate }: ScriptViewerProps) {
   const [showVersions, setShowVersions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -251,9 +356,7 @@ export default function ScriptViewer({ scene, onRollback, onScriptUpdate }: Scri
 
       {/* 剧本内容 */}
       <div className="p-6">
-        <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-700">
-          {script.yamlContent}
-        </pre>
+        <StructuredScriptView content={script.yamlContent} />
       </div>
 
       {/* 时间/地点信息 */}

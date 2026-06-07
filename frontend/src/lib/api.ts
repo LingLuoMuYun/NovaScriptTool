@@ -318,3 +318,24 @@ export function getChangedScenes(
   return request(`/api/novels/${novelId}/changed-scenes`);
 }
 
+export interface ValidationResult {
+  totalScenes: number;
+  validCount: number;
+  structuredCount: number;
+  legacyCount: number;
+  invalidCount: number;
+  results: {
+    sceneNum: number;
+    status: string;
+    format?: string;
+    errors?: string[];
+    warnings?: string[];
+    characterCount?: number;
+    blockCount?: number;
+  }[];
+}
+
+export function validateScripts(novelId: string): Promise<ValidationResult> {
+  return request(`/api/novels/${novelId}/validate`);
+}
+
