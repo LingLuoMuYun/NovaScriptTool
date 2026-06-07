@@ -413,8 +413,9 @@ export function deleteConversation(conversationId: string): Promise<{ ok: boolea
 }
 
 /**
- * 发送聊天消息（普通 JSON 请求/响应）
- * 返回 { conversationId, userMessage, assistantMessage }
+ * 发送聊天消息（SSE 真流式）
+ * 后端逐 token 推送 SSE 事件，前端 ReadableStream reader 解析
+ * 返回 AbortController 用于取消
  */
 export function streamChat(
   params: {
@@ -444,11 +445,54 @@ export function streamChat(
         callbacks.onError?.(err.error || `HTTP ${res.status}`);
         return;
       }
-      const data = await res.json();
-      // 发送完整响应
-      callbacks.onMeta?.({ conversationId: data.conversationId, title: "" });
-      callbacks.onToken(data.assistantMessage.content);
-      callbacks.onDone?.(data.conversationId);
+
+      // SSE ReadableStream 读取
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.("浏览器不支持流式响应");
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const event = JSON.parse(line.slice(6));
+
+                if (event.token) {
+                  callbacks.onToken(event.token);
+                } else if (event.meta) {
+                  callbacks.onMeta?.({
+                    conversationId: event.meta.conversationId,
+                    title: "",
+                  });
+                } else if (event.done) {
+                  callbacks.onDone?.(event.conversationId);
+                } else if (event.error) {
+                  callbacks.onError?.(event.error);
+                }
+              } catch {
+                // 跳过解析失败的行
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          callbacks.onError?.(err.message);
+        }
+      }
     })
     .catch((err) => {
       if (err.name !== "AbortError") {

@@ -195,8 +195,8 @@ export default function ChatPanel({
           }
         },
         onToken: (token) => {
-          // 显示完整回复
-          setStreamingText(token);
+          // SSE 真流式：逐 token 追加渲染（typewriter 效果）
+          setStreamingText(prev => prev + token);
         },
         onDone: (convId) => {
           // 从服务器重新加载消息（确保用服务端ID和时间戳）

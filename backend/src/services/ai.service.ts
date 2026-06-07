@@ -102,6 +102,35 @@ export async function chatCompletion(
   };
 }
 
+// --- DeepSeek 流式聊天补全 ---
+
+/**
+ * DeepSeek 流式聊天补全 — 返回 AsyncGenerator，逐 token yield
+ * 使用 OpenAI 兼容客户端 + stream:true，后端逐 token 推送 SSE 给前端
+ */
+export async function* chatCompletionStream(
+  messages: ChatMessage[],
+  options: ChatOptions = {}
+): AsyncGenerator<string> {
+  const {
+    temperature = 0.7,
+    maxTokens = 1024,
+  } = options;
+
+  const stream = await deepseekClient.chat.completions.create({
+    model: DEEPSEEK_MODEL,
+    messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    temperature,
+    max_tokens: maxTokens,
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const delta = (chunk as any).choices?.[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
 // --- Agent 快捷方法 ---
 
 /** Agent 1: 剧情解构者 — 提取故事大纲与时间线 */

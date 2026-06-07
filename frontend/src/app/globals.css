@@ -24,6 +24,16 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
+  /* 右侧滑入 */
+  .animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(100%); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
   /* 脉冲闪烁 */
   .animate-pulse-glow {
     animation: pulseGlow 2s ease-in-out infinite;

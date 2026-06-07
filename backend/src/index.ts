@@ -4,7 +4,8 @@ import multer from "multer";
 import path from "path";
 import crypto from "crypto";
 import { PrismaClient } from "@prisma/client";
-import { mimoClient, deepseekClient, chatCompletion } from "./services/ai.service";
+import { mimoClient, deepseekClient, chatCompletion, chatCompletionStream } from "./services/ai.service";
+import type { ChatMessage } from "./services/ai.service";
 import { cleanText, splitChapters, chunkByChars, analyzeText } from "./utils/text-processor";
 import { jobQueue } from "./services/job-queue.service";
 import { initFTS5, search as fullTextSearch } from "./services/search.service";
@@ -2054,11 +2055,32 @@ app.delete("/api/chat/conversations/:id", async (req, res) => {
 
 // 聊天接口（普通 JSON 响应，可靠稳定）
 app.post("/api/chat/stream", async (req, res) => {
+  // SSE 响应头
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const sendSSE = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  let aborted = false;
+  // 使用 res close 检测客户端断开（res close 在连接意外中断时触发）
+  res.on("close", () => {
+    if (!res.writableEnded) {
+      console.log("[chat] response closed before end — client disconnected");
+      aborted = true;
+    }
+  });
+
   try {
     const { conversationId, novelId, message, templateId } = req.body;
 
     if (!message || !message.trim()) {
-      return res.status(400).json({ error: "消息不能为空" });
+      sendSSE({ error: "消息不能为空" });
+      return res.end();
     }
 
     // 获取或创建会话
@@ -2067,7 +2089,10 @@ app.post("/api/chat/stream", async (req, res) => {
       conversation = await prisma.chatConversation.findUnique({
         where: { id: conversationId },
       });
-      if (!conversation) return res.status(404).json({ error: "会话不存在" });
+      if (!conversation) {
+        sendSSE({ error: "会话不存在" });
+        return res.end();
+      }
     } else {
       const title = message.trim().substring(0, 40) + (message.length > 40 ? "..." : "");
       conversation = await prisma.chatConversation.create({
@@ -2079,14 +2104,14 @@ app.post("/api/chat/stream", async (req, res) => {
       });
     }
 
-    // 获取历史消息（仅保留最近 3 轮=6 条）
+    // 获取历史消息（最近 3 轮=6 条）
     const existingMessages = await prisma.chatMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "asc" },
       take: 6,
     });
 
-    // 构建精简 system prompt
+    // 构建 system prompt
     const template = templateId
       ? TEMPLATES.find((t) => t.id === templateId)
       : null;
@@ -2095,7 +2120,6 @@ app.post("/api/chat/stream", async (req, res) => {
 
     let systemPrompt = `你是 NovaScriptTool 的 AI 编剧助手（${genreName}方向）。简洁专业地回答用户关于小说改编剧本的问题。回答控制在 200 字以内，点到即止。`;
 
-    // 如果有关联小说，直接送原文片段
     if (novelId) {
       const novel = await prisma.novel.findUnique({
         where: { id: novelId },
@@ -2122,59 +2146,59 @@ app.post("/api/chat/stream", async (req, res) => {
       data: { conversationId: conversation.id, role: "user", content: message },
     });
 
-    // 调用 DeepSeek API
-    console.log("[chat] Calling DeepSeek...");
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    // 发送会话元信息
+    sendSSE({ meta: { conversationId: conversation.id, userMessageId: userMsg.id } });
 
-    const deepseekRes = await fetch(
-      `${process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1"}/chat/completions`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
-          messages: llmMessages,
-          temperature,
-          max_tokens: 1024,
-          stream: false,
-        }),
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeoutId);
+    // 调用 DeepSeek 流式 API，逐 token 推送 SSE
+    console.log("[chat] Calling DeepSeek (stream:true)...");
+    let fullContent = "";
 
-    if (!deepseekRes.ok) {
-      const errText = await deepseekRes.text();
-      console.error("[chat] DeepSeek error:", deepseekRes.status, errText.substring(0, 200));
-      return res.status(502).json({ error: `AI 服务异常 (${deepseekRes.status})` });
+    const tokenStream = chatCompletionStream(llmMessages as ChatMessage[], { temperature, maxTokens: 1024 });
+
+    for await (const token of tokenStream) {
+      if (aborted) break;
+      fullContent += token;
+      sendSSE({ token });
     }
 
-    const data = await deepseekRes.json() as any;
-    const assistantContent = data.choices?.[0]?.message?.content || "";
-    console.log("[chat] Response:", assistantContent.length, "chars");
+    if (aborted) {
+      // 用户中断 — 保存已输出的部分内容
+      if (fullContent.trim()) {
+        await prisma.chatMessage.create({
+          data: { conversationId: conversation.id, role: "assistant", content: fullContent + "\n\n[用户中断]" },
+        });
+      }
+      console.log("[chat] 客户端断开，已保存部分回复:", fullContent.length, "chars");
+      return res.end();
+    }
 
-    // 保存助手回复
+    console.log("[chat] Stream complete:", fullContent.length, "chars");
+
+    // 保存助手回复到 DB
     const assistantMsg = await prisma.chatMessage.create({
-      data: { conversationId: conversation.id, role: "assistant", content: assistantContent },
+      data: { conversationId: conversation.id, role: "assistant", content: fullContent },
     });
     await prisma.chatConversation.update({
       where: { id: conversation.id },
       data: { updatedAt: new Date() },
     });
 
-    // 返回完整结果
-    res.json({
+    // 发送完成事件
+    sendSSE({
+      done: true,
       conversationId: conversation.id,
-      userMessage: userMsg,
-      assistantMessage: assistantMsg,
+      messageId: assistantMsg.id,
     });
+
+    res.end();
   } catch (err: any) {
-    console.error("Chat error:", err.message);
-    res.status(500).json({ error: err.message || "AI 请求失败" });
+    console.error("Chat stream error:", err.message);
+    if (!aborted) {
+      try {
+        sendSSE({ error: err.message || "AI 请求失败" });
+      } catch {}
+    }
+    res.end();
   }
 });
 
