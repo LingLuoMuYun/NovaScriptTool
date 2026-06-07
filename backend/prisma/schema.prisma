@@ -26,12 +26,13 @@ model Novel {
 }
 
 model Character {
-  id       String  @id @default(uuid())
-  novelId  String  @map("novel_id")
-  name     String
-  aliases  String  @default("[]")
-  roleType String  @map("role_type")
-  traits   String  @default("{}")
+  id          String  @id @default(uuid())
+  novelId     String  @map("novel_id")
+  name        String
+  aliases     String  @default("[]")
+  roleType    String  @map("role_type")
+  traits      String  @default("{}")
+  speechStyle String  @default("{}") @map("speech_style")
 
   novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
 

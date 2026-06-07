@@ -139,6 +139,22 @@ export function deleteNovel(id: string): Promise<{ ok: boolean }> {
   return request(`/api/novels/${id}`, { method: "DELETE" });
 }
 
+export function updateCharacter(
+  id: string,
+  data: {
+    name?: string;
+    aliases?: string | string[];
+    roleType?: string;
+    traits?: string | object;
+    speechStyle?: string | object;
+  }
+): Promise<Character> {
+  return request(`/api/characters/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 export function getNovelStats(id: string): Promise<NovelStats> {
   return request(`/api/novels/${id}/stats`);
 }

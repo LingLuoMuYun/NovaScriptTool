@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { getNovels, Novel } from "@/lib/api";
 import NovelUpload from "@/components/NovelUpload";
 import NovelList from "@/components/NovelList";
+import CharacterLab from "@/components/CharacterLab";
 
 export default function Home() {
   const [novels, setNovels] = useState<Novel[]>([]);
@@ -26,7 +27,7 @@ export default function Home() {
   }, [fetchNovels]);
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
+    <main className="mx-auto min-h-screen max-w-6xl px-4 py-8">
       {/* 顶部标题 */}
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">🎬 NovaScriptTool</h1>
@@ -55,6 +56,9 @@ export default function Home() {
         </div>
         <NovelList novels={novels} onRefresh={fetchNovels} loading={loading} />
       </div>
+
+      {/* 角色人设实验室 */}
+      <CharacterLab novels={novels} />
     </main>
   );
 }

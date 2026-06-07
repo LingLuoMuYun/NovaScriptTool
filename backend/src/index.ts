@@ -187,9 +187,19 @@ app.post("/api/novels/:id/analyze", async (req, res) => {
       },
     });
 
-    // 批量创建角色
+    // 批量创建角色（保留用户在人设实验室中配置的语言风格包）
     if (result.characters.length > 0) {
-      // 先删除旧角色
+      // 保存旧角色的语言风格包（按角色名索引）
+      const oldChars = await prisma.character.findMany({
+        where: { novelId: req.params.id },
+        select: { name: true, speechStyle: true },
+      });
+      const speechStyleMap = new Map<string, string>();
+      for (const c of oldChars) {
+        if (c.speechStyle && c.speechStyle !== "{}") speechStyleMap.set(c.name, c.speechStyle);
+      }
+
+      // 删除旧角色
       await prisma.character.deleteMany({ where: { novelId: req.params.id } });
 
       await prisma.character.createMany({
@@ -201,6 +211,23 @@ app.post("/api/novels/:id/analyze", async (req, res) => {
           traits: JSON.stringify(c.traits || {}),
         })),
       });
+
+      // 恢复用户配置的语言风格包
+      if (speechStyleMap.size > 0) {
+        const newChars = await prisma.character.findMany({
+          where: { novelId: req.params.id },
+          select: { id: true, name: true },
+        });
+        for (const c of newChars) {
+          const saved = speechStyleMap.get(c.name);
+          if (saved) {
+            await prisma.character.update({
+              where: { id: c.id },
+              data: { speechStyle: saved },
+            });
+          }
+        }
+      }
     }
 
     // 后处理：过滤 conflicts 中不属于角色的抽象实体（如"命运""社会"等AI幻觉）
@@ -246,11 +273,12 @@ app.post("/api/novels/:id/generate-scripts", async (req, res) => {
 
     const { runScriptGenerationPipeline } = await import("./services/ai.service");
 
-    // 解析角色数据
+    // 解析角色数据（包含人设实验室的语言风格包）
     const characters = novel.characters.map((c) => ({
       name: c.name,
       roleType: c.roleType,
       traits: JSON.parse(c.traits || "{}"),
+      speechStyle: JSON.parse(c.speechStyle || "{}"),
     }));
 
     console.log(`🎬 开始生成场景剧本: ${novel.title}`);
@@ -347,7 +375,16 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
       data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
     });
 
-    // 存储角色
+    // 存储角色（保留用户在人设实验室中配置的语言风格包）
+    const oldChars1 = await prisma.character.findMany({
+      where: { novelId: req.params.id },
+      select: { name: true, speechStyle: true },
+    });
+    const speechStyleMap1 = new Map<string, string>();
+    for (const c of oldChars1) {
+      if (c.speechStyle && c.speechStyle !== "{}") speechStyleMap1.set(c.name, c.speechStyle);
+    }
+
     await prisma.character.deleteMany({ where: { novelId: req.params.id } });
     if (analysisResult.characters.length > 0) {
       await prisma.character.createMany({
@@ -359,17 +396,40 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
           traits: JSON.stringify(c.traits || {}),
         })),
       });
+
+      // 恢复用户配置的语言风格包
+      if (speechStyleMap1.size > 0) {
+        const newChars1 = await prisma.character.findMany({
+          where: { novelId: req.params.id },
+          select: { id: true, name: true },
+        });
+        for (const c of newChars1) {
+          const saved = speechStyleMap1.get(c.name);
+          if (saved) {
+            await prisma.character.update({
+              where: { id: c.id },
+              data: { speechStyle: saved },
+            });
+          }
+        }
+      }
     }
 
     // 2. 生成场景剧本（锁保护）
+    // 从数据库重新获取角色，以包含用户配置的 speechStyle
+    const dbChars1 = await prisma.character.findMany({
+      where: { novelId: req.params.id },
+    });
+    const charsWithStyle = dbChars1.map((c) => ({
+      name: c.name,
+      roleType: c.roleType,
+      traits: JSON.parse(c.traits || "{}"),
+      speechStyle: JSON.parse(c.speechStyle || "{}"),
+    }));
     console.log("🎬 阶段 2/2: 场景规划 + 剧本生成");
     const scriptResult = await runScriptGenerationPipeline(
       novel.content,
-      analysisResult.characters.map((c) => ({
-        name: c.name,
-        roleType: c.roleType,
-        traits: c.traits,
-      }))
+      charsWithStyle
     );
 
     // 仅删除未锁定场景
@@ -592,6 +652,36 @@ app.get("/api/novels/:id/characters", async (req, res) => {
   }
 });
 
+// 更新角色（人设实验室：语言风格包等）
+app.patch("/api/characters/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, aliases, roleType, traits, speechStyle } = req.body;
+
+    // 检查角色是否存在
+    const existing = await prisma.character.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: "角色不存在" });
+    }
+
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (aliases !== undefined) data.aliases = typeof aliases === "string" ? aliases : JSON.stringify(aliases);
+    if (roleType !== undefined) data.roleType = roleType;
+    if (traits !== undefined) data.traits = typeof traits === "string" ? traits : JSON.stringify(traits);
+    if (speechStyle !== undefined) data.speechStyle = typeof speechStyle === "string" ? speechStyle : JSON.stringify(speechStyle);
+
+    const updated = await prisma.character.update({
+      where: { id },
+      data,
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 数据库 CRUD ---
 
 // 获取所有小说
@@ -806,7 +896,16 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
       data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
     });
 
-    // 存储角色
+    // 存储角色（保留用户在人设实验室中配置的语言风格包）
+    const oldCharsSSE = await prisma.character.findMany({
+      where: { novelId: req.params.id },
+      select: { name: true, speechStyle: true },
+    });
+    const speechStyleMapSSE = new Map<string, string>();
+    for (const c of oldCharsSSE) {
+      if (c.speechStyle && c.speechStyle !== "{}") speechStyleMapSSE.set(c.name, c.speechStyle);
+    }
+
     await prisma.character.deleteMany({ where: { novelId: req.params.id } });
     if (analysisResult.characters.length > 0) {
       await prisma.character.createMany({
@@ -818,16 +917,38 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
           traits: JSON.stringify(c.traits || {}),
         })),
       });
+
+      // 恢复用户配置的语言风格包
+      if (speechStyleMapSSE.size > 0) {
+        const newCharsSSE = await prisma.character.findMany({
+          where: { novelId: req.params.id },
+          select: { id: true, name: true },
+        });
+        for (const c of newCharsSSE) {
+          const saved = speechStyleMapSSE.get(c.name);
+          if (saved) {
+            await prisma.character.update({
+              where: { id: c.id },
+              data: { speechStyle: saved },
+            });
+          }
+        }
+      }
     }
 
-    // 2. 场景生成阶段
+    // 2. 场景生成阶段（从数据库重新获取角色以包含 speechStyle）
+    const dbCharsSSE = await prisma.character.findMany({
+      where: { novelId: req.params.id },
+    });
+    const charsWithStyleSSE = dbCharsSSE.map((c) => ({
+      name: c.name,
+      roleType: c.roleType,
+      traits: JSON.parse(c.traits || "{}"),
+      speechStyle: JSON.parse(c.speechStyle || "{}"),
+    }));
     const scriptResult = await runScriptGenerationPipeline(
       novel.content,
-      analysisResult.characters.map((c) => ({
-        name: c.name,
-        roleType: c.roleType,
-        traits: c.traits,
-      })),
+      charsWithStyleSSE,
       onProgress
     );
     if (aborted) return;
@@ -2085,7 +2206,16 @@ app.post("/api/novels/:id/pipeline/queue", async (req, res) => {
           data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
         });
 
-        // 存储角色
+        // 存储角色（保留用户在人设实验室中配置的语言风格包）
+        const oldCharsQ = await prisma.character.findMany({
+          where: { novelId },
+          select: { name: true, speechStyle: true },
+        });
+        const speechStyleMapQ = new Map<string, string>();
+        for (const c of oldCharsQ) {
+          if (c.speechStyle && c.speechStyle !== "{}") speechStyleMapQ.set(c.name, c.speechStyle);
+        }
+
         await prisma.character.deleteMany({ where: { novelId } });
         if (analysisResult.characters.length > 0) {
           await prisma.character.createMany({
@@ -2097,17 +2227,37 @@ app.post("/api/novels/:id/pipeline/queue", async (req, res) => {
               traits: JSON.stringify(c.traits || {}),
             })),
           });
+
+          // 恢复用户配置的语言风格包
+          if (speechStyleMapQ.size > 0) {
+            const newCharsQ = await prisma.character.findMany({
+              where: { novelId },
+              select: { id: true, name: true },
+            });
+            for (const c of newCharsQ) {
+              const saved = speechStyleMapQ.get(c.name);
+              if (saved) {
+                await prisma.character.update({
+                  where: { id: c.id },
+                  data: { speechStyle: saved },
+                });
+              }
+            }
+          }
         }
 
-        // Phase 2: 生成剧本
+        // Phase 2: 生成剧本（从数据库重新获取角色以包含 speechStyle）
         onProgress({ stage: "generate", progress: 50, message: "🎬 启动场景规划与剧本生成..." });
+        const dbCharsQ = await prisma.character.findMany({ where: { novelId } });
+        const charsWithStyleQ = dbCharsQ.map((c) => ({
+          name: c.name,
+          roleType: c.roleType,
+          traits: JSON.parse(c.traits || "{}"),
+          speechStyle: JSON.parse(c.speechStyle || "{}"),
+        }));
         const scriptResult = await runScriptGenerationPipeline(
           novelContent,
-          analysisResult.characters.map((c) => ({
-            name: c.name,
-            roleType: c.roleType,
-            traits: c.traits,
-          })),
+          charsWithStyleQ,
           onProgress
         );
 

@@ -210,6 +210,27 @@ export async function writeScript(
   sceneInfo: any,
   charactersInScene: any[]
 ) {
+  // 构建角色语言风格指令
+  const speechStyleInstructions = charactersInScene
+    .filter((c: any) => c.speechStyle && typeof c.speechStyle === "object")
+    .map((c: any) => {
+      const s = c.speechStyle;
+      const parts: string[] = [];
+      if (s.tone) parts.push(`语气：${s.tone}`);
+      if (s.vocabulary) parts.push(`用词：${s.vocabulary}`);
+      if (s.dialect) parts.push(`方言/口音：${s.dialect}`);
+      if (s.catchphrase) parts.push(`口头禅："${s.catchphrase}"`);
+      if (s.sentenceLength) parts.push(`句长偏好：${s.sentenceLength}`);
+      if (s.customNotes) parts.push(`补充：${s.customNotes}`);
+      return parts.length > 0 ? `  - ${c.name}：${parts.join("；")}` : null;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  const speechStyleBlock = speechStyleInstructions
+    ? `\n⚠️ 角色语言风格约束（必须严格遵守！）：\n每个角色的对白必须符合以下语言风格设定，确保每个角色说话方式有显著差异，杜绝「千人一面」：\n${speechStyleInstructions}\n`
+    : "";
+
   return chatCompletion(
     [
       {
@@ -218,7 +239,7 @@ export async function writeScript(
 
 在场角色档案：
 ${JSON.stringify(charactersInScene)}
-
+${speechStyleBlock}
 输出格式要求（必须严格遵循 JSON Schema）：
 {
   "sceneNum": ${sceneInfo.sceneNum},
@@ -236,6 +257,7 @@ ${JSON.stringify(charactersInScene)}
 规则（非常重要）：
 - content 数组按剧本时间顺序排列，action 和 dialogue 交替出现，比例约 1:1
 - dialogue 的 emotion 标注角色语气（愤怒/悲伤/平静/焦急/兴奋/冷漠/...）
+- **每个角色的对白必须符合其语言风格约束**，不同角色的说话方式要有明显差异
 - 场景结尾必须有 transition（CUT TO: / FADE OUT. / DISSOLVE TO: / SMASH CUT:）
 - charactersInScene 必须是本场景实际出场角色名
 - 每个 content 元素必须包含 type 字段，值为 "action" / "dialogue" / "transition" 三者之一
@@ -651,7 +673,7 @@ export interface GeneratedScript {
  */
 export async function runScriptGenerationPipeline(
   novelContent: string,
-  characters: { name: string; roleType: string; traits: any }[],
+  characters: { name: string; roleType: string; traits: any; speechStyle?: any }[],
   onProgress?: ProgressCallback
 ): Promise<{ scenes: GeneratedScene[]; scripts: GeneratedScript[] }> {
   const progress = (event: PipelineProgress) => onProgress?.(event);
@@ -664,6 +686,7 @@ export async function runScriptGenerationPipeline(
     name: c.name,
     roleType: c.roleType,
     personality: c.traits?.personality || [],
+    speechStyle: c.speechStyle || null,
   }));
 
   // Agent 3: 场景规划（带降级）
