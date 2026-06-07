@@ -814,13 +814,35 @@ app.post("/api/novels/:id/build-deps", async (req, res) => {
 
 app.post("/api/novels/:id/impact-analysis", async (req, res) => {
   try {
-    const { changedSceneNums } = req.body;
+    const { changedSceneNums, minWeight } = req.body;
     if (!changedSceneNums || !Array.isArray(changedSceneNums)) {
       return res.status(400).json({ error: "请提供 changedSceneNums 数组" });
     }
     const { analyzeImpact } = await import("./services/dependency.service");
-    const result = await analyzeImpact(req.params.id, changedSceneNums);
+    const result = await analyzeImpact(req.params.id, changedSceneNums, minWeight ?? 0);
     res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 检查依赖图状态（避免重复 AI 调用）
+app.get("/api/novels/:id/deps-status", async (req, res) => {
+  try {
+    const { getDepsStatus } = await import("./services/dependency.service");
+    const result = await getDepsStatus(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 检测变更场景（含手动编辑版本的场景）
+app.get("/api/novels/:id/changed-scenes", async (req, res) => {
+  try {
+    const { getChangedScenes } = await import("./services/dependency.service");
+    const scenes = await getChangedScenes(req.params.id);
+    res.json({ scenes });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -841,7 +863,7 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
 
     const { writeScript } = await import("./services/ai.service");
 
-    // 获取指定场景
+    // 获取指定场景（含剧本内容用于提取在场景角色）
     const targetScenes = await prisma.scene.findMany({
       where: {
         novelId: req.params.id,
@@ -849,6 +871,7 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
         isLocked: false,
       },
       orderBy: { sceneNum: "asc" },
+      include: { scripts: { orderBy: { version: "desc" }, take: 1 } },
     });
 
     const characters = novel.characters.map((c) => ({
@@ -861,14 +884,25 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
 
     const results: any[] = [];
     for (const scene of targetScenes) {
+      // 从场景已有剧本中提取出场角色名，精确匹配
+      const scriptContent = scene.scripts[0]?.yamlContent || "";
       const sceneChars = characters.filter((c) =>
-        c.name.includes(scene.location) || true // 简化：给所有角色
-      ).slice(0, 3);
+        scriptContent.includes(c.name)
+      );
+      // fallback: 若未能匹配到任何角色，使用主角+反派（通常场景核心角色）
+      if (sceneChars.length === 0) {
+        const coreChars = characters.filter(
+          (c) => c.roleType === "主角" || c.roleType === "反派"
+        );
+        sceneChars.push(...coreChars.slice(0, 3));
+      }
+      // 限制最大角色数以控制 token 消耗
+      const charsForAI = sceneChars.slice(0, 5);
 
-      console.log(`  ✍️ 增量生成场景 ${scene.sceneNum}...`);
+      console.log(`  ✍️ 增量生成场景 ${scene.sceneNum}... (${charsForAI.map(c => c.name).join(", ") || "无匹配角色"})`);
       const scriptResponse = await writeScript(
         { sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
-        sceneChars.length > 0 ? sceneChars : characters.slice(0, 2)
+        charsForAI.length > 0 ? charsForAI : characters.slice(0, 2)
       );
 
       const { parseAIJson } = await import("./services/ai.service");
@@ -907,6 +941,147 @@ app.post("/api/novels/:id/incremental-pipeline", async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 增量管道 SSE 流式版（带进度推送）
+app.get("/api/novels/:id/incremental-pipeline-stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const sendEvent = (event: any) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  let aborted = false;
+  req.on("close", () => { aborted = true; });
+
+  try {
+    const sceneNumsRaw = req.query.sceneNums as string;
+    if (!sceneNumsRaw) {
+      sendEvent({ stage: "error", message: "请提供 sceneNums 参数" });
+      return res.end();
+    }
+    const sceneNums = sceneNumsRaw.split(",").map(Number).filter((n) => !isNaN(n));
+    if (sceneNums.length === 0) {
+      sendEvent({ stage: "error", message: "sceneNums 格式错误" });
+      return res.end();
+    }
+
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      include: { characters: true },
+    });
+    if (!novel) {
+      sendEvent({ stage: "error", message: "小说不存在" });
+      return res.end();
+    }
+
+    const { writeScript, parseAIJson } = await import("./services/ai.service");
+
+    const targetScenes = await prisma.scene.findMany({
+      where: { novelId: req.params.id, sceneNum: { in: sceneNums }, isLocked: false },
+      orderBy: { sceneNum: "asc" },
+      include: { scripts: { orderBy: { version: "desc" }, take: 1 } },
+    });
+
+    const characters = novel.characters.map((c) => ({
+      name: c.name,
+      roleType: c.roleType,
+      traits: JSON.parse(c.traits || "{}"),
+    }));
+
+    const total = targetScenes.length;
+    let completed = 0;
+
+    for (const scene of targetScenes) {
+      if (aborted) break;
+
+      sendEvent({
+        stage: "scene_start",
+        current: completed,
+        total,
+        sceneNum: scene.sceneNum,
+        message: `✍️ 正在生成场景 ${scene.sceneNum}... (${completed + 1}/${total})`,
+      });
+
+      try {
+        const scriptContent = scene.scripts[0]?.yamlContent || "";
+        const sceneChars = characters.filter((c) => scriptContent.includes(c.name));
+        if (sceneChars.length === 0) {
+          const coreChars = characters.filter((c) => c.roleType === "主角" || c.roleType === "反派");
+          sceneChars.push(...coreChars.slice(0, 3));
+        }
+        const charsForAI = sceneChars.slice(0, 5);
+
+        const scriptResponse = await writeScript(
+          { sceneNum: scene.sceneNum, location: scene.location, timeOfDay: scene.timeOfDay },
+          charsForAI.length > 0 ? charsForAI : characters.slice(0, 2)
+        );
+        const scriptData = parseAIJson(scriptResponse.content);
+
+        const latest = await prisma.script.findFirst({
+          where: { sceneId: scene.id },
+          orderBy: { version: "desc" },
+        });
+        const nextVersion = (latest?.version || 0) + 1;
+
+        const newScript = await prisma.script.create({
+          data: {
+            sceneId: scene.id,
+            yamlContent: scriptData.script || JSON.stringify(scriptData),
+            version: nextVersion,
+            createdBy: "system",
+            parentVersionId: latest?.id || null,
+          },
+        });
+
+        await prisma.scene.update({
+          where: { id: scene.id },
+          data: { currentVersionId: newScript.id },
+        });
+
+        completed++;
+        sendEvent({
+          stage: "scene_done",
+          current: completed,
+          total,
+          sceneNum: scene.sceneNum,
+          version: nextVersion,
+          message: `✅ 场景 ${scene.sceneNum} 完成 → v${nextVersion}`,
+        });
+        console.log(`  ✅ 场景 ${scene.sceneNum} → v${nextVersion}`);
+      } catch (err: any) {
+        sendEvent({
+          stage: "scene_error",
+          current: completed,
+          total,
+          sceneNum: scene.sceneNum,
+          message: `❌ 场景 ${scene.sceneNum} 失败: ${err.message}`,
+        });
+        console.error(`  ❌ 场景 ${scene.sceneNum} 失败:`, err.message);
+      }
+    }
+
+    if (!aborted) {
+      sendEvent({
+        stage: "done",
+        current: completed,
+        total,
+        message: `✅ 增量重算完成！更新了 ${completed} 个场景`,
+        detail: `成功 ${completed}/${total}`,
+      });
+    }
+    res.end();
+  } catch (err: any) {
+    console.error("增量管道 SSE 失败:", err.message);
+    if (!aborted) {
+      sendEvent({ stage: "error", message: err.message });
+    }
+    res.end();
   }
 });
 

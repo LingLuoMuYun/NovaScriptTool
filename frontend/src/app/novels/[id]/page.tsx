@@ -14,7 +14,7 @@ import AnnotationPanel from "@/components/AnnotationPanel";
 import ImpactDialog from "@/components/ImpactDialog";
 import SceneEditor from "@/components/SceneEditor";
 import AnalysisDashboard from "@/components/AnalysisDashboard";
-import { buildDeps, analyzeImpact, runIncrementalPipeline } from "@/lib/api";
+import { buildDeps, analyzeImpact, runIncrementalPipeline, getDepsStatus, getChangedScenes } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -46,9 +46,13 @@ export default function NovelDetailPage() {
   const [impactData, setImpactData] = useState<{
     affectedSceneNums: number[];
     excludedLockedNums: number[];
+    totalScenesToRegenerate?: number;
+    impactPaths?: { targetSceneNum: number; sourceSceneNum: number; type: string; weight: number }[];
   } | null>(null);
   const [impactLoading, setImpactLoading] = useState(false);
   const [buildingDeps, setBuildingDeps] = useState(false);
+  const [depsBuilt, setDepsBuilt] = useState(false); // 依赖图是否已构建
+  const [minWeight, setMinWeight] = useState(0.3); // BFS 权重阈值
   // 场景编辑器状态
   const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
@@ -192,6 +196,7 @@ export default function NovelDetailPage() {
     setBuildingDeps(true);
     try {
       const result = await buildDeps(id);
+      setDepsBuilt(true);
       alert(`✅ 依赖图谱构建完成！共 ${result.sceneCount} 个场景，${result.edges.length} 条依赖关系。`);
     } catch (err: any) {
       setGenError(err.message);
@@ -205,14 +210,38 @@ export default function NovelDetailPage() {
       alert("请先生成场景剧本");
       return;
     }
-    // 默认检查所有非锁定场景变更的影响
     setImpactLoading(true);
     try {
-      // 先构建/更新依赖图
-      await buildDeps(id);
-      // 以所有非锁定场景为变更起点进行 BFS
-      const unlockedNums = scenes.filter((s) => !s.isLocked).map((s) => s.sceneNum);
-      const impact = await analyzeImpact(id, unlockedNums.slice(0, 3)); // 取前3个作为变更源
+      // 1. 检查依赖图状态，仅在必要时构建
+      let needBuild = !depsBuilt;
+      if (depsBuilt) {
+        const status = await getDepsStatus(id);
+        needBuild = !status.hasDeps;
+      }
+      if (needBuild) {
+        await buildDeps(id);
+        setDepsBuilt(true);
+      }
+
+      // 2. 智能检测变更场景：优先使用手动编辑过的场景
+      let changeSources: number[] = [];
+      try {
+        const { scenes: changedScenes } = await getChangedScenes(id);
+        if (changedScenes.length > 0) {
+          changeSources = changedScenes.filter((n) => {
+            const s = scenes.find((s) => s.sceneNum === n);
+            return s && !s.isLocked;
+          });
+        }
+      } catch { /* 降级：API 不可用时使用旧逻辑 */ }
+
+      // 3. fallback: 无手动编辑场景时，使用所有未锁定场景
+      if (changeSources.length === 0) {
+        changeSources = scenes.filter((s) => !s.isLocked).map((s) => s.sceneNum);
+      }
+
+      // 4. BFS 影响分析（含权重阈值）
+      const impact = await analyzeImpact(id, changeSources, minWeight);
       setImpactData(impact);
       setShowImpact(true);
     } catch (err: any) {
@@ -580,6 +609,27 @@ export default function NovelDetailPage() {
         <ImpactDialog
           affectedSceneNums={impactData.affectedSceneNums}
           excludedLockedNums={impactData.excludedLockedNums}
+          impactPaths={impactData.impactPaths}
+          changeSources={impactData.affectedSceneNums.filter(
+            (n) => !scenes.find((s) => s.sceneNum === n)?.isLocked
+          ).slice(0, 3)}
+          minWeight={minWeight}
+          onMinWeightChange={setMinWeight}
+          onRecalculate={async () => {
+            try {
+              const sources = impactData.affectedSceneNums.filter(
+                (n) => !scenes.find((s) => s.sceneNum === n)?.isLocked
+              ).slice(0, 3);
+              const newImpact = await analyzeImpact(
+                id,
+                sources.length > 0 ? sources : [scenes[0]?.sceneNum || 1],
+                minWeight
+              );
+              setImpactData(newImpact);
+            } catch (err: any) {
+              setGenError(err.message);
+            }
+          }}
           onConfirm={handleIncrementalConfirm}
           onCancel={() => setShowImpact(false)}
           loading={pipelining}

@@ -282,15 +282,17 @@ export function buildDeps(novelId: string): Promise<{ edges: any[]; sceneCount: 
 
 export function analyzeImpact(
   novelId: string,
-  changedSceneNums: number[]
+  changedSceneNums: number[],
+  minWeight?: number
 ): Promise<{
   affectedSceneNums: number[];
   excludedLockedNums: number[];
   totalScenesToRegenerate: number;
+  impactPaths: { targetSceneNum: number; sourceSceneNum: number; type: string; weight: number }[];
 }> {
   return request(`/api/novels/${novelId}/impact-analysis`, {
     method: "POST",
-    body: JSON.stringify({ changedSceneNums }),
+    body: JSON.stringify({ changedSceneNums, minWeight }),
   });
 }
 
@@ -302,5 +304,17 @@ export function runIncrementalPipeline(
     method: "POST",
     body: JSON.stringify({ sceneNums }),
   });
+}
+
+export function getDepsStatus(
+  novelId: string
+): Promise<{ hasDeps: boolean; edgeCount: number; sceneCount: number }> {
+  return request(`/api/novels/${novelId}/deps-status`);
+}
+
+export function getChangedScenes(
+  novelId: string
+): Promise<{ scenes: number[] }> {
+  return request(`/api/novels/${novelId}/changed-scenes`);
 }
 

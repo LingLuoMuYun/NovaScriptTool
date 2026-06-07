@@ -110,38 +110,54 @@ export async function buildDependencyGraph(novelId: string): Promise<{
 
 /**
  * BFS 影响分析：给定变更的场景编号，计算最小影响场景集合
+ * @param minWeight 依赖权重阈值（默认 0），低于此权重的边在 BFS 中被忽略
  * 排除锁定场景
  */
 export async function analyzeImpact(
   novelId: string,
-  changedSceneNums: number[]
+  changedSceneNums: number[],
+  minWeight: number = 0
 ): Promise<{
   affectedSceneNums: number[];
   excludedLockedNums: number[];
   totalScenesToRegenerate: number;
+  /** 影响链路详情：每个受影响场景的依赖来源 */
+  impactPaths: { targetSceneNum: number; sourceSceneNum: number; type: string; weight: number }[];
 }> {
   // 获取所有依赖边
   const edges = await prisma.dependencyEdge.findMany({ where: { novelId } });
 
-  // 构建邻接表（有向图）
-  const adj = new Map<number, number[]>();
+  // 构建邻接表（有向图），记录权重和类型
+  const adj = new Map<number, { target: number; type: string; weight: number }[]>();
   for (const e of edges) {
+    if (e.weight < minWeight) continue; // 权重阈值过滤
     if (!adj.has(e.sourceSceneNum)) adj.set(e.sourceSceneNum, []);
-    adj.get(e.sourceSceneNum)!.push(e.targetSceneNum);
+    adj.get(e.sourceSceneNum)!.push({
+      target: e.targetSceneNum,
+      type: e.dependencyType,
+      weight: e.weight,
+    });
   }
 
-  // BFS 遍历
+  // BFS 遍历，记录依赖链路
   const visited = new Set<number>();
   const queue = [...changedSceneNums];
+  const impactPaths: { targetSceneNum: number; sourceSceneNum: number; type: string; weight: number }[] = [];
   for (const n of queue) visited.add(n);
 
   while (queue.length > 0) {
     const current = queue.shift()!;
     const neighbors = adj.get(current) || [];
     for (const neighbor of neighbors) {
-      if (!visited.has(neighbor)) {
-        visited.add(neighbor);
-        queue.push(neighbor);
+      if (!visited.has(neighbor.target)) {
+        visited.add(neighbor.target);
+        queue.push(neighbor.target);
+        impactPaths.push({
+          targetSceneNum: neighbor.target,
+          sourceSceneNum: current,
+          type: neighbor.type,
+          weight: neighbor.weight,
+        });
       }
     }
   }
@@ -161,5 +177,38 @@ export async function analyzeImpact(
     affectedSceneNums: affected.sort((a, b) => a - b),
     excludedLockedNums: excluded.sort((a, b) => a - b),
     totalScenesToRegenerate: affected.length,
+    impactPaths,
+  };
+}
+
+/**
+ * 检测变更场景：查找所有存在手动编辑版本的场景
+ * （即 Script.createdBy === "user" 的场景）
+ */
+export async function getChangedScenes(novelId: string): Promise<number[]> {
+  const scenes = await prisma.scene.findMany({
+    where: { novelId },
+    include: { scripts: { where: { createdBy: "user" }, select: { id: true } } },
+    orderBy: { sceneNum: "asc" },
+  });
+  return scenes.filter((s) => s.scripts.length > 0).map((s) => s.sceneNum);
+}
+
+/**
+ * 检查依赖图是否已构建
+ */
+export async function getDepsStatus(novelId: string): Promise<{
+  hasDeps: boolean;
+  edgeCount: number;
+  sceneCount: number;
+}> {
+  const [edgeCount, sceneCount] = await Promise.all([
+    prisma.dependencyEdge.count({ where: { novelId } }),
+    prisma.scene.count({ where: { novelId } }),
+  ]);
+  return {
+    hasDeps: edgeCount > 0,
+    edgeCount,
+    sceneCount,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import type {
   ForceGraphMethods,
@@ -217,6 +217,18 @@ export default function CharacterNetworkGraph({
 
   // 是否有关系数据
   const hasRelationships = links.length > 0;
+
+  // 过滤器变更 → 递增 key 强制 ForceGraph2D 完整重建
+  //（修复: 取消再点亮筛选后连线消失 — d3-force 内部状态需重置）
+  const [graphKey, setGraphKey] = useState(0);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setGraphKey((k) => k + 1);
+  }, [activeFilters]);
 
   // 切换筛选
   const toggleFilter = useCallback((roleType: string) => {
@@ -511,6 +523,7 @@ export default function CharacterNetworkGraph({
         )}
 
         <ForceGraph2D<GraphNode, GraphLink>
+          key={graphKey}
           ref={graphRef}
           graphData={filteredData}
           width={700}
