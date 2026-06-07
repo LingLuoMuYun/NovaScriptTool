@@ -1,6 +1,8 @@
 "use client";
 
 import PlotOutline from "./PlotOutline";
+import CharacterNetworkGraph from "./CharacterNetworkGraph";
+import { Character } from "@/lib/api";
 
 interface AnalysisDashboardProps {
   novelId: string;
@@ -8,6 +10,7 @@ interface AnalysisDashboardProps {
   sceneCount: number;
   characterCount: number;
   characterNames?: string[];
+  characters?: Character[];
   onSceneClick?: (sceneNum: number) => void;
 }
 
@@ -16,6 +19,7 @@ export default function AnalysisDashboard({
   sceneCount,
   characterCount,
   characterNames,
+  characters,
 }: AnalysisDashboardProps) {
   const conflictCount = analysis?.conflicts?.length || 0;
 
@@ -45,6 +49,11 @@ export default function AnalysisDashboard({
 
       {/* 剧情大纲（含冲突统计图表） */}
       {analysis && <PlotOutline analysis={analysis} knownCharacters={characterNames} />}
+
+      {/* 角色关系网络图 */}
+      {characters && characters.length > 0 && (
+        <CharacterNetworkGraph characters={characters} />
+      )}
     </div>
   );
 }

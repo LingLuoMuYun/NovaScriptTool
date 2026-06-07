@@ -502,6 +502,7 @@ export default function NovelDetailPage() {
           sceneCount={scenes.length}
           characterCount={characters.length}
           characterNames={characters.map((c) => c.name)}
+          characters={characters}
           onSceneClick={(sceneNum: number) => {
             const scene = scenes.find((s) => s.sceneNum === sceneNum);
             if (scene) {

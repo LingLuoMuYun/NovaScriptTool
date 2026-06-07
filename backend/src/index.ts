@@ -512,9 +512,18 @@ app.post("/api/novels", upload.single("file"), async (req, res) => {
     let content = "";
 
     if (req.file) {
-      // 文件上传模式
+      // 文件上传模式（自动检测编码：UTF-8 → GBK）
       const fs = await import("fs");
-      content = fs.readFileSync(req.file.path, "utf-8");
+      const buf = fs.readFileSync(req.file.path);
+      content = buf.toString("utf-8");
+      // 检测 UTF-8 解码是否正常（乱码特征：大量替换字符 U+FFFD 或问号）
+      const malformedCount = (content.match(/�/g) || []).length;
+      if (malformedCount > 3 || content.includes("\x00")) {
+        // UTF-8 解码失败，回退到 GBK（Windows 中文默认编码）
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const iconv = require("iconv-lite");
+        content = iconv.decode(buf, "gbk");
+      }
       title = req.body.title || path.basename(req.file.originalname, path.extname(req.file.originalname));
     } else if (req.body.content) {
       // JSON body 模式
