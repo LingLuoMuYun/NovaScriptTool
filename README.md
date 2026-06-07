@@ -15,6 +15,14 @@
 
 ---
 
+## 🎥 演示视频
+
+[![NovaScriptTool Demo](https://img.shields.io/badge/Bilibili-演示视频-00A1D6?logo=bilibili)](https://www.bilibili.com/video/BV1zyUUB4EHU/?spm_id_from=333.1387.homepage.video_card.click)
+
+> 完整操作演示：[https://www.bilibili.com/video/BV1zyUUB4EHU/](https://www.bilibili.com/video/BV1zyUUB4EHU/?spm_id_from=333.1387.homepage.video_card.click)
+
+---
+
 ## 🚀 快速启动
 
 ```bash
@@ -161,7 +169,7 @@ Agent 间传递结构化约束（角色列表、剧情大纲），避免单一 A
 | **依赖图谱 BFS 影响分析** | 场景间因果关系建模，BFS 计算最小受影响范围，支持权重阈值过滤 |
 | **SSE 流式进度推送** | 流水线实时进度可视化（分阶段、百分比、统计信息），前后端双向通信 |
 | **行内评论系统** | 块级注释锚定、@ 提及角色自动补全、多类型评论（todo/question/suggestion/note） |
-| **剧本 Schema 校验** | Zod Schema 强校验 + 3 次自动重试 + 安全降级占位机制 |
+| **剧本 Schema 校验** | Zod Schema 强校验 + 7 条语义规则 + 跨场景一致性检查，详见 [YAML Schema 定义与设计说明](doc/YAML-Schema定义与设计说明.md) |
 | **安全降级策略** | AI 内容审核拦截后自动缩短文本 + 关闭思维链重试的多级降级 |
 | **模板化 AI 聊天** | 8 套编剧风格模板，每套独立的 system prompt/temperature/角色偏好 |
 | **并发控制与任务队列** | 内存级 FIFO 任务队列 + 令牌桶速率限制器，可配置并发数，SSE 实时推送队列状态，排队任务可取消 |
@@ -174,41 +182,63 @@ Agent 间传递结构化约束（角色列表、剧情大纲），避免单一 A
 
 ```
 NovaScriptTool/
-├── frontend/                        # Next.js 14 前端
+├── frontend/                           # Next.js 14 前端
 │   └── src/
 │       ├── app/
-│       │   ├── layout.tsx           # 根布局 (ThemeProvider + 导航)
-│       │   ├── page.tsx             # 首页 (上传 + 小说列表)
-│       │   └── novels/[id]/page.tsx # 小说详情页 (Tab 工作台 + AI 助手)
-│       ├── components/              # 21 个 UI 组件
-│       │   ├── ChatPanel.tsx        # AI 对话面板
-│       │   ├── ScriptViewer.tsx     # 结构化剧本查看器 + 行内评论
-│       │   ├── AnalysisDashboard.tsx# 分析仪表板
-│       │   ├── PipelineProgress.tsx # 流水线进度可视化
-│       │   ├── TemplateSelector.tsx # 项目模板选择器
-│       │   ├── QueueStatusPanel.tsx  # 并发队列状态面板
-│       │   ├── GlobalSearch.tsx       # ⌘K 全文搜索弹窗
-│       │   └── ...                  # 其余 16 个组件
-│       └── lib/api.ts               # API 客户端 (含 SSE 队列订阅)
-├── backend/                         # Express API Server
+│       │   ├── layout.tsx              # 根布局 (ThemeProvider + 导航)
+│       │   ├── page.tsx                # 首页 (上传 + 小说列表)
+│       │   └── novels/[id]/page.tsx    # 小说详情页 (Tab 工作台 + AI 助手)
+│       ├── components/                 # 27 个 UI 组件
+│       │   ├── ChatPanel.tsx           # AI 对话面板 (SSE 真流式)
+│       │   ├── ScriptViewer.tsx        # 结构化剧本查看器 + 行内评论
+│       │   ├── ScriptBlockEditor.tsx   # 剧本块编辑器 (非程序员友好)
+│       │   ├── DualPaneEditor.tsx      # 双栏编辑 (源码 ↔ 结构)
+│       │   ├── ValidationPanel.tsx     # 三层校验报告面板
+│       │   ├── CharacterNetworkGraph.tsx# 角色关系网络图 (7 项增强)
+│       │   ├── AnalysisDashboard.tsx   # 分析仪表板
+│       │   ├── PipelineProgress.tsx    # 流水线进度可视化
+│       │   ├── TemplateSelector.tsx    # 项目模板选择器
+│       │   ├── QueueStatusPanel.tsx    # 并发队列状态面板
+│       │   ├── GlobalSearch.tsx        # ⌘K 全文搜索弹窗
+│       │   ├── ConflictChart.tsx       # 冲突类型统计图
+│       │   └── ...                     # 其余 15 个组件
+│       └── lib/api.ts                  # API 客户端 (含 SSE 队列订阅)
+├── backend/                            # Express API Server
 │   ├── src/
-│   │   ├── index.ts                 # 全部路由 (50+ API 端点 + 队列端点)
+│   │   ├── index.ts                    # 全部路由 (50+ API 端点 + 队列端点)
 │   │   ├── services/
-│   │   │   ├── ai.service.ts        # AI 客户端 + 4 Agent + 流水分线
-│   │   │   ├── chunked-pipeline.ts  # 分块分析流水线
-│   │   │   ├── dependency.service.ts# 依赖图谱 + BFS 影响分析
-│   │   │   ├── diff.service.ts      # 版本 Diff 引擎
-│   │   │   ├── export.service.ts    # 多格式导出
-│   │   │   ├── job-queue.service.ts # 并发控制 + 令牌桶 + FIFO 队列
-│   │   │   └── search.service.ts     # FTS5 全文搜索引擎
-│   │   ├── schemas/                 # Zod Schema 定义
-│   │   └── utils/text-processor.ts  # 文本预处理 + 章节分割
-│   └── prisma/schema.prisma         # 7 个数据模型
-├── electron/                        # Electron 桌面应用
-│   ├── main.js                      # 主进程 (双服务管理)
-│   └── preload.js                   # IPC 桥接 (原生文件对话框)
-└── package.json                     # Electron 打包配置
+│   │   │   ├── ai.service.ts           # AI 客户端 + 4 Agent + 流式生成
+│   │   │   ├── chunked-pipeline.service.ts # 分块分析流水线
+│   │   │   ├── dependency.service.ts   # 依赖图谱 + BFS 影响分析
+│   │   │   ├── diff.service.ts         # 版本 Diff 引擎
+│   │   │   ├── export.service.ts       # 多格式导出 (YAML/FDX/Fountain)
+│   │   │   ├── job-queue.service.ts    # 并发控制 + 令牌桶 + FIFO 队列
+│   │   │   └── search.service.ts       # FTS5 全文搜索引擎
+│   │   ├── schemas/
+│   │   │   └── script.schema.ts        # Zod Schema + 语义校验规则
+│   │   └── utils/text-processor.ts     # 文本预处理 + 章节分割
+│   └── prisma/schema.prisma            # 7 个数据模型
+├── doc/                                # 文档
+│   ├── YAML-Schema定义与设计说明.md      # *** YAML Schema 完整定义 ***
+│   ├── 小说转剧本创作辅助系统 开发文档v3.md
+│   ├── 小说转剧本创作辅助系统 开发文档v2.md
+│   └── ...
+├── electron/                           # Electron 桌面应用
+│   ├── main.js                         # 主进程 (双服务管理)
+│   └── preload.js                      # IPC 桥接 (原生文件对话框)
+└── package.json                        # Electron 打包配置
 ```
+
+---
+
+## 📚 文档
+
+| 文档 | 说明 |
+|:---|:---|
+| [YAML Schema 定义与设计说明](doc/YAML-Schema定义与设计说明.md) | 剧本结构化 Schema 的完整定义、字段说明、设计原因与开发者参考 |
+| [开发文档 v3](doc/小说转剧本创作辅助系统%20开发文档v3.md) | 系统架构、API 接口、组件体系、路线图 |
+| [开发文档 v2](doc/小说转剧本创作辅助系统%20开发文档v2.md) | 数据库设计、26 个 API 接口、组件详细说明 |
+| [人物分析功能开发文档](doc/人物分析功能开发文档.md) | 角色关系网络、冲突分析、热力图等技术细节 |
 
 ---
 
