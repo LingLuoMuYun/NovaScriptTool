@@ -1,13 +1,20 @@
 import "dotenv/config";
 import OpenAI from "openai";
 
-// Mimo API 客户端 (OpenAI 兼容)
+// Mimo API 客户端 (OpenAI 兼容) — 分析流水线用
 export const mimoClient = new OpenAI({
   apiKey: process.env.MIMO_API_KEY!,
   baseURL: process.env.MIMO_BASE_URL!,
 });
 
+// DeepSeek API 客户端 — AI 聊天用
+export const deepseekClient = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY!,
+  baseURL: process.env.DEEPSEEK_BASE_URL!,
+});
+
 const DEFAULT_MODEL = process.env.MIMO_MODEL || "mimo-v2.5";
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 
 // --- 类型定义 ---
 

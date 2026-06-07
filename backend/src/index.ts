@@ -3,7 +3,7 @@ import cors from "cors";
 import multer from "multer";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
-import { mimoClient, chatCompletion } from "./services/ai.service";
+import { mimoClient, deepseekClient, chatCompletion } from "./services/ai.service";
 import { cleanText, splitChapters, chunkByChars, analyzeText } from "./utils/text-processor";
 
 const prisma = new PrismaClient();
@@ -1904,17 +1904,14 @@ app.post("/api/chat/stream", async (req, res) => {
       },
     });
 
-    // 调用流式 AI（关键：关闭 thinking 思维链，否则 Mimo 会先内部推理 3-8 秒再输出）
+    // 调用 DeepSeek 流式 AI 聊天
     sendEvent({ type: "status", status: "generating" });
-    const stream = await mimoClient.chat.completions.create({
-      model: process.env.MIMO_MODEL || "mimo-v2.5",
+    const stream = await deepseekClient.chat.completions.create({
+      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
       messages: llmMessages as any,
       temperature,
-      max_completion_tokens: 1024,
+      max_tokens: 1024,
       stream: true,
-      // 禁用思维链 — 这是延迟的主要来源
-      // @ts-ignore — Mimo 扩展参数
-      thinking: { type: "disabled" },
     });
 
     let fullResponse = "";
