@@ -112,16 +112,27 @@ export async function analyzePlot(novelContent: string) {
         role: "system",
         content: `你是一位资深的剧本分析师。请通读以下小说内容，完成以下任务：
 1. 提取核心故事大纲（包含起因、发展、高潮、结局）
-2. 梳理全局时间线（按时间顺序列出关键事件节点）
+2. 梳理全局时间线（按时间顺序列出关键事件节点，每个节点需标注时间提示、地点、涉及角色、搜索关键词）
 3. 识别主要剧情冲突与转折点（冲突参与方必须是原文中有姓名的具体人物，禁止使用"命运""社会""环境"等抽象概念）
 
 请以 JSON 格式输出，结构如下：
 {
   "outline": { "opening": "...", "development": "...", "climax": "...", "ending": "..." },
-  "timeline": [{ "order": 1, "event": "...", "chapter": "..." }],
+  "timeline": [
+    {
+      "order": 1,
+      "event": "事件简述（一句话）",
+      "chapter": "所在章节名",
+      "timeHint": "原文中的时间提示（如'三天后''当夜''次日下午'），无则填null",
+      "location": "事件发生地点，无则填null",
+      "characters": ["参与角色A", "角色B"],
+      "keywords": ["搜索关键词1", "关键词2"]
+    }
+  ],
   "conflicts": [{ "type": "人物冲突", "description": "...", "parties": ["角色A", "角色B"] }]
 }
-注意: conflicts[].parties 只能包含原文中有具体姓名的人物。`,
+注意: conflicts[].parties 只能包含原文中有具体姓名的人物。
+注意: timeline[].timeHint/location/characters/keywords 务必填写，这将用于时间线精确检索。`,
       },
       { role: "user", content: novelContent },
     ],
@@ -409,7 +420,7 @@ export interface AnalysisResult {
       climax: string;
       ending: string;
     };
-    timeline: { order: number; event: string; chapter?: string }[];
+    timeline: { order: number; event: string; chapter?: string; timeHint?: string; location?: string; characters?: string[]; keywords?: string[] }[];
     conflicts: { type: string; description: string; parties: string[] }[];
   };
   characters: {
@@ -532,16 +543,27 @@ async function _doAnalysis(
         role: "system",
         content: `你是一位资深的剧本分析师。请通读以下小说内容，完成以下任务：
 1. 提取核心故事大纲（包含起因、发展、高潮、结局）
-2. 梳理全局时间线（按时间顺序列出关键事件节点）
+2. 梳理全局时间线（按时间顺序列出关键事件节点，每个节点需标注时间提示、地点、涉及角色、搜索关键词）
 3. 识别主要剧情冲突与转折点（冲突参与方必须是原文中有姓名的具体人物，禁止使用"命运""社会""环境"等抽象概念）
 
 请以 JSON 格式输出，结构如下：
 {
   "outline": { "opening": "...", "development": "...", "climax": "...", "ending": "..." },
-  "timeline": [{ "order": 1, "event": "...", "chapter": "..." }],
+  "timeline": [
+    {
+      "order": 1,
+      "event": "事件简述（一句话）",
+      "chapter": "所在章节名",
+      "timeHint": "原文中的时间提示（如'三天后''当夜''次日下午'），无则填null",
+      "location": "事件发生地点，无则填null",
+      "characters": ["参与角色A", "角色B"],
+      "keywords": ["搜索关键词1", "关键词2"]
+    }
+  ],
   "conflicts": [{ "type": "人物冲突", "description": "...", "parties": ["角色A", "角色B"] }]
 }
-注意: conflicts[].parties 只能包含原文中有具体姓名的人物。`,
+注意: conflicts[].parties 只能包含原文中有具体姓名的人物。
+注意: timeline[].timeHint/location/characters/keywords 务必填写，这将用于时间线精确检索。`,
       },
       { role: "user", content },
     ],
