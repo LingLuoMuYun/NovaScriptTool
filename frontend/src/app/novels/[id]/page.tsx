@@ -29,7 +29,7 @@ export default function NovelDetailPage() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
-  const [activeTab, setActiveTab] = useState<"info" | "analysis" | "characters" | "scenes" | "annotations">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "analysis" | "characters" | "scenes" | "annotations" | "chat">("info");
   const [selectedScene, setSelectedScene] = useState<SceneWithScripts | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
@@ -58,8 +58,6 @@ export default function NovelDetailPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editingScene, setEditingScene] = useState<SceneWithScripts | null>(null);
-  // AI 聊天面板
-  const [showChat, setShowChat] = useState(false);
 
   const fetchNovel = useCallback(async () => {
     setFetchError("");
@@ -531,6 +529,7 @@ export default function NovelDetailPage() {
           { key: "characters", label: `👥 角色 (${characters.length})` },
           { key: "scenes", label: `🎬 场景 (${scenes.length})` },
           { key: "annotations", label: "💬 注记" },
+          { key: "chat", label: "🤖 AI 对话" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -630,6 +629,20 @@ export default function NovelDetailPage() {
         />
       )}
 
+      {activeTab === "chat" && (
+        <div style={{ minHeight: "calc(100vh - 350px)" }}>
+          <ChatPanel
+            novelId={id}
+            novelTitle={novel.title}
+            novelCharacters={characters.map((c) => ({
+              name: c.name,
+              roleType: c.roleType,
+            }))}
+            embedded
+          />
+        </div>
+      )}
+
       {/* 场景编辑弹窗 */}
       {showEditor && (
         <SceneEditor
@@ -645,38 +658,15 @@ export default function NovelDetailPage() {
         />
       )}
 
-      {/* AI 聊天浮动按钮 */}
-      {!showChat && (
+      {/* AI 聊天快速入口：浮动按钮 → 切换到对话 Tab */}
+      {activeTab !== "chat" && (
         <button
-          onClick={() => setShowChat(true)}
+          onClick={() => setActiveTab("chat")}
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95 animate-fade-in"
         >
           <span className="text-lg">🤖</span>
           <span>AI 助手</span>
         </button>
-      )}
-
-      {/* AI 聊天滑出面板 */}
-      {showChat && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* 背景遮罩 */}
-          <div
-            className="absolute inset-0 bg-black/30 dark:bg-black/50"
-            onClick={() => setShowChat(false)}
-          />
-          {/* 面板 */}
-          <div className="relative w-full max-w-lg h-full animate-fade-in">
-            <ChatPanel
-              novelId={id}
-              novelTitle={novel.title}
-              novelCharacters={characters.map((c) => ({
-                name: c.name,
-                roleType: c.roleType,
-              }))}
-              onClose={() => setShowChat(false)}
-            />
-          </div>
-        </div>
       )}
 
       {/* 增量重算影响确认弹窗 */}
