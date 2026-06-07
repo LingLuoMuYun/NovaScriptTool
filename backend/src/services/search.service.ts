@@ -13,141 +13,47 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// ─── FTS5 表结构 ──────────────────────────────────────────
+// ─── FTS5 建表语句（每条独立，不用 ; 分割以避免触发器语法被破坏）──
 
-const FTS5_SETUP_SQL = `
--- 小说全文索引（外部内容表）
-CREATE VIRTUAL TABLE IF NOT EXISTS novels_fts USING fts5(
-  title,
-  content,
-  content='novels',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
+const FTS5_TABLE_STATEMENTS = [
+  // 小说全文索引
+  `CREATE VIRTUAL TABLE IF NOT EXISTS novels_fts USING fts5(title, content, content='novels', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2')`,
+  // 剧本全文索引（仅索引 yaml_content 真实列，scene_label 在查询时 JOIN 获取）
+  `CREATE VIRTUAL TABLE IF NOT EXISTS scripts_fts USING fts5(yaml_content, content='scripts', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2')`,
+  // 角色全文索引
+  `CREATE VIRTUAL TABLE IF NOT EXISTS characters_fts USING fts5(name, aliases, traits, content='characters', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2')`,
+  // 注记全文索引
+  `CREATE VIRTUAL TABLE IF NOT EXISTS annotations_fts USING fts5(content, author_name, content='annotations', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2')`,
+];
 
--- 剧本全文索引（外部内容表）
-CREATE VIRTUAL TABLE IF NOT EXISTS scripts_fts USING fts5(
-  yaml_content,
-  scene_label,
-  content='scripts',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
+const FTS5_TRIGGER_STATEMENTS = [
+  // novels 触发器
+  `CREATE TRIGGER IF NOT EXISTS novels_fts_insert AFTER INSERT ON novels BEGIN INSERT INTO novels_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content); END`,
+  `CREATE TRIGGER IF NOT EXISTS novels_fts_delete AFTER DELETE ON novels BEGIN INSERT INTO novels_fts(novels_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, old.content); END`,
+  `CREATE TRIGGER IF NOT EXISTS novels_fts_update AFTER UPDATE ON novels BEGIN INSERT INTO novels_fts(novels_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, old.content); INSERT INTO novels_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content); END`,
+  // scripts 触发器（scene_label 在搜索时通过 JOIN 获取）
+  `CREATE TRIGGER IF NOT EXISTS scripts_fts_insert AFTER INSERT ON scripts BEGIN INSERT INTO scripts_fts(rowid, yaml_content) VALUES (new.rowid, new.yaml_content); END`,
+  `CREATE TRIGGER IF NOT EXISTS scripts_fts_delete AFTER DELETE ON scripts BEGIN INSERT INTO scripts_fts(scripts_fts, rowid, yaml_content) VALUES('delete', old.rowid, old.yaml_content); END`,
+  `CREATE TRIGGER IF NOT EXISTS scripts_fts_update AFTER UPDATE ON scripts BEGIN INSERT INTO scripts_fts(scripts_fts, rowid, yaml_content) VALUES('delete', old.rowid, old.yaml_content); INSERT INTO scripts_fts(rowid, yaml_content) VALUES (new.rowid, new.yaml_content); END`,
+  // characters 触发器
+  `CREATE TRIGGER IF NOT EXISTS characters_fts_insert AFTER INSERT ON characters BEGIN INSERT INTO characters_fts(rowid, name, aliases, traits) VALUES (new.rowid, new.name, new.aliases, new.traits); END`,
+  `CREATE TRIGGER IF NOT EXISTS characters_fts_delete AFTER DELETE ON characters BEGIN INSERT INTO characters_fts(characters_fts, rowid, name, aliases, traits) VALUES('delete', old.rowid, old.name, old.aliases, old.traits); END`,
+  `CREATE TRIGGER IF NOT EXISTS characters_fts_update AFTER UPDATE ON characters BEGIN INSERT INTO characters_fts(characters_fts, rowid, name, aliases, traits) VALUES('delete', old.rowid, old.name, old.aliases, old.traits); INSERT INTO characters_fts(rowid, name, aliases, traits) VALUES (new.rowid, new.name, new.aliases, new.traits); END`,
+  // annotations 触发器
+  `CREATE TRIGGER IF NOT EXISTS annotations_fts_insert AFTER INSERT ON annotations BEGIN INSERT INTO annotations_fts(rowid, content, author_name) VALUES (new.rowid, new.content, new.author_name); END`,
+  `CREATE TRIGGER IF NOT EXISTS annotations_fts_delete AFTER DELETE ON annotations BEGIN INSERT INTO annotations_fts(annotations_fts, rowid, content, author_name) VALUES('delete', old.rowid, old.content, old.author_name); END`,
+  `CREATE TRIGGER IF NOT EXISTS annotations_fts_update AFTER UPDATE ON annotations BEGIN INSERT INTO annotations_fts(annotations_fts, rowid, content, author_name) VALUES('delete', old.rowid, old.content, old.author_name); INSERT INTO annotations_fts(rowid, content, author_name) VALUES (new.rowid, new.content, new.author_name); END`,
+];
 
--- 角色全文索引（外部内容表）
-CREATE VIRTUAL TABLE IF NOT EXISTS characters_fts USING fts5(
-  name,
-  aliases,
-  traits,
-  content='characters',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
-
--- 注记全文索引（外部内容表）
-CREATE VIRTUAL TABLE IF NOT EXISTS annotations_fts USING fts5(
-  content,
-  author_name,
-  content='annotations',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
-
--- ─── 同步触发器：novels ────────────────────────────────
-
-CREATE TRIGGER IF NOT EXISTS novels_fts_insert AFTER INSERT ON novels BEGIN
-  INSERT INTO novels_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS novels_fts_delete AFTER DELETE ON novels BEGIN
-  INSERT INTO novels_fts(novels_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, old.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS novels_fts_update AFTER UPDATE ON novels BEGIN
-  INSERT INTO novels_fts(novels_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, old.content);
-  INSERT INTO novels_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
-END;
-
--- ─── 同步触发器：scripts ───────────────────────────────
-
-CREATE TRIGGER IF NOT EXISTS scripts_fts_insert AFTER INSERT ON scripts BEGIN
-  INSERT INTO scripts_fts(rowid, yaml_content, scene_label)
-  VALUES (
-    new.rowid,
-    new.yaml_content,
-    (SELECT 'Scene ' || scene_num || ' — ' || location FROM scenes WHERE rowid = new.scene_id)
-  );
-END;
-
-CREATE TRIGGER IF NOT EXISTS scripts_fts_delete AFTER DELETE ON scripts BEGIN
-  INSERT INTO scripts_fts(scripts_fts, rowid, yaml_content, scene_label) VALUES('delete', old.rowid, old.yaml_content, '');
-END;
-
-CREATE TRIGGER IF NOT EXISTS scripts_fts_update AFTER UPDATE ON scripts BEGIN
-  INSERT INTO scripts_fts(scripts_fts, rowid, yaml_content, scene_label) VALUES('delete', old.rowid, old.yaml_content, '');
-  INSERT INTO scripts_fts(rowid, yaml_content, scene_label)
-  VALUES (
-    new.rowid,
-    new.yaml_content,
-    (SELECT 'Scene ' || scene_num || ' — ' || location FROM scenes WHERE rowid = new.scene_id)
-  );
-END;
-
--- ─── 同步触发器：characters ─────────────────────────────
-
-CREATE TRIGGER IF NOT EXISTS characters_fts_insert AFTER INSERT ON characters BEGIN
-  INSERT INTO characters_fts(rowid, name, aliases, traits) VALUES (new.rowid, new.name, new.aliases, new.traits);
-END;
-
-CREATE TRIGGER IF NOT EXISTS characters_fts_delete AFTER DELETE ON characters BEGIN
-  INSERT INTO characters_fts(characters_fts, rowid, name, aliases, traits) VALUES('delete', old.rowid, old.name, old.aliases, old.traits);
-END;
-
-CREATE TRIGGER IF NOT EXISTS characters_fts_update AFTER UPDATE ON characters BEGIN
-  INSERT INTO characters_fts(characters_fts, rowid, name, aliases, traits) VALUES('delete', old.rowid, old.name, old.aliases, old.traits);
-  INSERT INTO characters_fts(rowid, name, aliases, traits) VALUES (new.rowid, new.name, new.aliases, new.traits);
-END;
-
--- ─── 同步触发器：annotations ────────────────────────────
-
-CREATE TRIGGER IF NOT EXISTS annotations_fts_insert AFTER INSERT ON annotations BEGIN
-  INSERT INTO annotations_fts(rowid, content, author_name) VALUES (new.rowid, new.content, new.author_name);
-END;
-
-CREATE TRIGGER IF NOT EXISTS annotations_fts_delete AFTER DELETE ON annotations BEGIN
-  INSERT INTO annotations_fts(annotations_fts, rowid, content, author_name) VALUES('delete', old.rowid, old.content, old.author_name);
-END;
-
-CREATE TRIGGER IF NOT EXISTS annotations_fts_update AFTER UPDATE ON annotations BEGIN
-  INSERT INTO annotations_fts(annotations_fts, rowid, content, author_name) VALUES('delete', old.rowid, old.content, old.author_name);
-  INSERT INTO annotations_fts(rowid, content, author_name) VALUES (new.rowid, new.content, new.author_name);
-END;
-`;
-
-// ─── 性能索引 ─────────────────────────────────────────────
-
-const PERFORMANCE_INDEXES_SQL = `
--- 场景按小说+编号查找（最频繁查询之一）
-CREATE INDEX IF NOT EXISTS idx_scenes_novel_num ON scenes(novel_id, scene_num);
-
--- 剧本按场景+版本查找（最新版本查询）
-CREATE INDEX IF NOT EXISTS idx_scripts_scene_version ON scripts(scene_id, version DESC);
-
--- 注记按小说+类型过滤（注记面板筛选）
-CREATE INDEX IF NOT EXISTS idx_annotations_novel_type ON annotations(novel_id, target_type);
-
--- 注记按小说+目标查找（行内评论查询）
-CREATE INDEX IF NOT EXISTS idx_annotations_novel_target ON annotations(novel_id, target_id);
-
--- 依赖边按小说查找（依赖图谱构建）
-CREATE INDEX IF NOT EXISTS idx_deps_novel ON dependency_edges(novel_id);
-
--- 聊天消息按会话+时间排序（对话历史）
-CREATE INDEX IF NOT EXISTS idx_messages_conv_time ON chat_messages(conversation_id, created_at);
-
--- 聊天会话按小说关联（会话列表）
-CREATE INDEX IF NOT EXISTS idx_chat_conv_novel ON chat_conversations(novel_id);
-`;
+const PERFORMANCE_INDEX_STATEMENTS = [
+  `CREATE INDEX IF NOT EXISTS idx_scenes_novel_num ON scenes(novel_id, scene_num)`,
+  `CREATE INDEX IF NOT EXISTS idx_scripts_scene_version ON scripts(scene_id, version DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_annotations_novel_type ON annotations(novel_id, target_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_annotations_novel_target ON annotations(novel_id, target_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_deps_novel ON dependency_edges(novel_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_messages_conv_time ON chat_messages(conversation_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_conv_novel ON chat_conversations(novel_id)`,
+];
 
 // ─── 初始化 ───────────────────────────────────────────────
 
@@ -170,21 +76,17 @@ export async function initFTS5(): Promise<void> {
       return;
     }
 
-    // 逐条执行 SQL（SQLite 不支持批量 CREATE TRIGGER）
-    const statements = (FTS5_SETUP_SQL + PERFORMANCE_INDEXES_SQL)
-      .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    for (const stmt of statements) {
-      try {
-        await prisma.$executeRawUnsafe(stmt + ";");
-      } catch (err: any) {
-        // 忽略 "already exists" 类错误
-        if (!err.message?.includes("already exists") && !err.message?.includes("duplicate")) {
-          console.warn(`  ⚠️ FTS5 初始化警告: ${err.message?.substring(0, 80)}`);
-        }
-      }
+    // 逐条执行建表语句
+    for (const stmt of FTS5_TABLE_STATEMENTS) {
+      try { await prisma.$executeRawUnsafe(stmt); } catch { /* 已存在则忽略 */ }
+    }
+    // 逐条执行触发器
+    for (const stmt of FTS5_TRIGGER_STATEMENTS) {
+      try { await prisma.$executeRawUnsafe(stmt); } catch { /* 已存在则忽略 */ }
+    }
+    // 逐条执行性能索引
+    for (const stmt of PERFORMANCE_INDEX_STATEMENTS) {
+      try { await prisma.$executeRawUnsafe(stmt); } catch { /* 已存在则忽略 */ }
     }
 
     // 重建已有数据的索引（仅首次）
@@ -200,11 +102,12 @@ export async function initFTS5(): Promise<void> {
 
 /** 重建所有 FTS5 索引（将已有数据导入 FTS5 表） */
 async function rebuildFTSIndexes(): Promise<void> {
+  // FTS5 外部内容表使用 'rebuild' 命令同步（比 INSERT SELECT 更可靠）
   const rebuildQueries = [
-    `INSERT INTO novels_fts(rowid, title, content) SELECT rowid, title, content FROM novels WHERE rowid NOT IN (SELECT rowid FROM novels_fts)`,
-    `INSERT INTO scripts_fts(rowid, yaml_content, scene_label) SELECT s.rowid, s.yaml_content, 'Scene ' || sc.scene_num || ' — ' || sc.location FROM scripts s LEFT JOIN scenes sc ON sc.rowid = s.scene_id WHERE s.rowid NOT IN (SELECT rowid FROM scripts_fts)`,
-    `INSERT INTO characters_fts(rowid, name, aliases, traits) SELECT rowid, name, aliases, traits FROM characters WHERE rowid NOT IN (SELECT rowid FROM characters_fts)`,
-    `INSERT INTO annotations_fts(rowid, content, author_name) SELECT rowid, content, author_name FROM annotations WHERE rowid NOT IN (SELECT rowid FROM annotations_fts)`,
+    `INSERT INTO novels_fts(novels_fts) VALUES('rebuild')`,
+    `INSERT INTO scripts_fts(scripts_fts) VALUES('rebuild')`,
+    `INSERT INTO characters_fts(characters_fts) VALUES('rebuild')`,
+    `INSERT INTO annotations_fts(annotations_fts) VALUES('rebuild')`,
   ];
 
   for (const sql of rebuildQueries) {
