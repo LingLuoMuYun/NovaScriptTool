@@ -1895,8 +1895,8 @@ app.post("/api/chat/stream", async (req, res) => {
     // 发送会话信息
     sendEvent({ type: "meta", conversationId: conversation.id, title: conversation.title });
 
-    // 保存用户消息
-    await prisma.chatMessage.create({
+    // 保存用户消息（异步，不阻塞 AI 调用）
+    const saveUserMsg = prisma.chatMessage.create({
       data: {
         conversationId: conversation.id,
         role: "user",
@@ -1904,13 +1904,17 @@ app.post("/api/chat/stream", async (req, res) => {
       },
     });
 
-    // 调用流式 AI（降低 max_tokens 和 temperature 以加快响应）
+    // 调用流式 AI（关键：关闭 thinking 思维链，否则 Mimo 会先内部推理 3-8 秒再输出）
+    sendEvent({ type: "status", status: "generating" });
     const stream = await mimoClient.chat.completions.create({
       model: process.env.MIMO_MODEL || "mimo-v2.5",
       messages: llmMessages as any,
       temperature,
       max_completion_tokens: 1024,
       stream: true,
+      // 禁用思维链 — 这是延迟的主要来源
+      // @ts-ignore — Mimo 扩展参数
+      thinking: { type: "disabled" },
     });
 
     let fullResponse = "";

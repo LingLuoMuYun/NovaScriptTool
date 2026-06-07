@@ -474,7 +474,22 @@ export default function ChatPanel({
               </div>
             ))}
 
-            {/* 流式响应 */}
+            {/* 流式响应 — 等待首个 token 时显示加载动画 */}
+            {streaming && !streamingText && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-gray-100 dark:bg-gray-800 px-4 py-2.5">
+                  <div className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>AI 思考中…</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 流式响应 — 有 token 时逐字显示 */}
             {streamingText && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-gray-100 dark:bg-gray-800 px-4 py-2.5">
