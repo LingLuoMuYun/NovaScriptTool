@@ -102,38 +102,53 @@ function StructuredScriptView({
 
         return (
           <div key={i} className="group relative">
-            {/* 块内容 — 有评论时高亮 */}
+            {/* 块内容 — 悬停时显示左侧强调条 + 背景微亮 */}
             <div
-              className={`relative rounded-lg transition-colors ${
+              className={`relative -mx-2 px-2 py-1 rounded-lg transition-all duration-150 ${
                 hasComments
-                  ? "bg-yellow-50 dark:bg-yellow-950 ring-1 ring-yellow-200 -mx-1 px-1"
-                  : "hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-950/50 -mx-1 px-1"
+                  ? "bg-yellow-50 dark:bg-yellow-950/60 ring-1 ring-yellow-200/60 dark:ring-yellow-700/30"
+                  : "group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50"
               }`}
             >
-              {/* 行内评论按钮 — hover 显示 */}
+              {/* 左侧强调条 — 悬停时显示 */}
+              <div
+                className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-full transition-all duration-150 ${
+                  hasComments
+                    ? "bg-yellow-400 dark:bg-yellow-500 opacity-100"
+                    : "bg-indigo-400 dark:bg-indigo-500 opacity-0 group-hover:opacity-100"
+                }`}
+              />
+
+              {/* Google Docs 风格 + 评论按钮 — 右侧悬停显示 */}
               <button
                 onClick={() => {
                   setCommentingIdx(commentingIdx === i ? null : i);
                   if (hasComments) setActiveBlockIdx(isActive ? null : i);
                 }}
-                className={`absolute -left-9 top-0 hidden h-6 w-6 items-center justify-center rounded-full text-xs leading-none transition group-hover:flex ${
+                className={`absolute -right-2 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full shadow-sm transition-all duration-150 z-10 ${
                   hasComments
-                    ? "flex bg-yellow-400 text-white shadow-sm dark:shadow-gray-950/30"
-                    : "bg-gray-200 text-gray-500 dark:text-gray-400 hover:bg-indigo-100 dark:bg-indigo-900/40 hover:text-indigo-600 dark:text-indigo-400"
+                    ? "h-6 min-w-[24px] bg-yellow-400 dark:bg-yellow-500 text-white opacity-100 hover:bg-yellow-500 dark:hover:bg-yellow-400 px-1.5"
+                    : "h-7 w-7 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 hover:border-indigo-300 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950"
                 }`}
-                title={hasComments ? `${blockComments.length} 条评论` : "添加评论"}
+                title={hasComments ? `${blockComments.length} 条评论 (${unresolvedCount} 未解决) — 点击查看` : "添加行内评论"}
               >
-                💬
+                {hasComments ? (
+                  <span className="text-xs font-bold leading-none">{blockComments.length}</span>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+                  </svg>
+                )}
               </button>
 
-              {/* 评论计数徽章 */}
-              {hasComments && (
+              {/* 已评论块：右上角未解决指示器 */}
+              {hasComments && unresolvedCount > 0 && (
                 <span
+                  className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white shadow-sm cursor-pointer z-20"
+                  title={`${unresolvedCount} 条未解决`}
                   onClick={() => setActiveBlockIdx(isActive ? null : i)}
-                  className="absolute -right-2 -top-2 flex h-5 min-w-[20px] cursor-pointer items-center justify-center rounded-full bg-yellow-500 px-1 text-xs font-bold text-white shadow-sm dark:shadow-gray-950/30 transition hover:bg-yellow-600"
-                  title={`${blockComments.length} 条评论 (${unresolvedCount} 条未解决)`}
                 >
-                  {blockComments.length}
+                  {unresolvedCount}
                 </span>
               )}
 
@@ -161,9 +176,9 @@ function StructuredScriptView({
               )}
             </div>
 
-            {/* 行内评论输入 */}
+            {/* 行内评论输入表单 */}
             {commentingIdx === i && (
-              <div className="mt-2 ml-4 pl-4 border-l-2 border-indigo-300 dark:border-indigo-700 animate-fade-in">
+              <div className="mt-3 ml-2 pl-4 border-l-2 border-indigo-300 dark:border-indigo-700 animate-fade-in">
                 <InlineCommentForm
                   characters={characters}
                   onSubmit={async (text, type, author) => {
@@ -177,7 +192,7 @@ function StructuredScriptView({
 
             {/* 评论线程 */}
             {isActive && hasComments && (
-              <div className="mt-2 ml-4 space-y-2 animate-fade-in">
+              <div className="mt-3 ml-2 space-y-2 animate-fade-in">
                 {blockComments.map((comment) => (
                   <CommentBubble
                     key={comment.id}
@@ -246,6 +261,7 @@ function InlineCommentForm({
           <option value="todo">📋 待办</option>
           <option value="question">❓ 疑问</option>
           <option value="suggestion">💡 建议</option>
+          <option value="note">📝 笔记</option>
         </select>
         <input
           type="text"
