@@ -17,9 +17,15 @@
 
 ## 🎥 演示视频
 
-[![NovaScriptTool Demo](https://img.shields.io/badge/Bilibili-演示视频-00A1D6?logo=bilibili)](https://www.bilibili.com/video/BV1zyUUB4EHU/?spm_id_from=333.1387.homepage.video_card.click)
+[![NovaScriptTool Demo](https://img.shields.io/badge/Bilibili-演示视频-00A1D6?logo=bilibili)](https://www.bilibili.com/video/BV1w8Et6wEDN/?spm_id_from=333.1387.homepage.video_card.click)
 
-> 完整操作演示：[https://www.bilibili.com/video/BV1zyUUB4EHU/](https://www.bilibili.com/video/BV1zyUUB4EHU/?spm_id_from=333.1387.homepage.video_card.click)
+> 完整操作演示：[https://www.bilibili.com/video/BV1w8Et6wEDN/](https://www.bilibili.com/video/BV1w8Et6wEDN/?spm_id_from=333.1387.homepage.video_card.click)
+
+## 📄 文档位置
+
+| 文档 | 说明 |
+|:---|:---|
+| [YAML Schema 定义与设计说明](doc/YAML-Schema定义与设计说明.md) | 定义剧本的 YAML Schema，包含字段说明、设计原因与开发者参考 |
 
 ---
 

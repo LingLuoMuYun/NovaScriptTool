@@ -35,16 +35,26 @@
       {
         "from": "backend",
         "to": "backend",
-        "filter": ["**/*", "!node_modules/.cache", "!src"]
+        "filter": [
+          "**/*",
+          "!node_modules/.cache",
+          "!src"
+        ]
       },
       {
         "from": "frontend",
         "to": "frontend",
-        "filter": ["**/*", "!node_modules/.cache", "!src"]
+        "filter": [
+          "**/*",
+          "!node_modules/.cache",
+          "!src"
+        ]
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "frontend/public/favicon.ico"
     },
     "nsis": {
@@ -53,14 +63,18 @@
       "createDesktopShortcut": true
     },
     "mac": {
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "linux": {
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
   }
 }
