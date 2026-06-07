@@ -1806,27 +1806,13 @@ app.delete("/api/chat/conversations/:id", async (req, res) => {
   }
 });
 
-// SSE 流式聊天
+// 聊天接口（普通 JSON 响应，可靠稳定）
 app.post("/api/chat/stream", async (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
-  const sendEvent = (event: any) => {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-
-  let aborted = false;
-  req.on("close", () => { aborted = true; });
-
   try {
-    const { conversationId, novelId, message, templateId, history } = req.body;
+    const { conversationId, novelId, message, templateId } = req.body;
 
     if (!message || !message.trim()) {
-      sendEvent({ type: "error", error: "消息不能为空" });
-      return res.end();
+      return res.status(400).json({ error: "消息不能为空" });
     }
 
     // 获取或创建会话
@@ -1835,10 +1821,7 @@ app.post("/api/chat/stream", async (req, res) => {
       conversation = await prisma.chatConversation.findUnique({
         where: { id: conversationId },
       });
-      if (!conversation) {
-        sendEvent({ type: "error", error: "会话不存在" });
-        return res.end();
-      }
+      if (!conversation) return res.status(404).json({ error: "会话不存在" });
     } else {
       const title = message.trim().substring(0, 40) + (message.length > 40 ? "..." : "");
       conversation = await prisma.chatConversation.create({
@@ -1850,14 +1833,14 @@ app.post("/api/chat/stream", async (req, res) => {
       });
     }
 
-    // 获取历史消息（仅保留最近 3 轮=6 条，加快响应）
+    // 获取历史消息（仅保留最近 3 轮=6 条）
     const existingMessages = await prisma.chatMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "asc" },
       take: 6,
     });
 
-    // 构建精简 system prompt（仅 3-4 句，大幅减少 token 消耗）
+    // 构建精简 system prompt
     const template = templateId
       ? TEMPLATES.find((t) => t.id === templateId)
       : null;
@@ -1866,7 +1849,7 @@ app.post("/api/chat/stream", async (req, res) => {
 
     let systemPrompt = `你是 NovaScriptTool 的 AI 编剧助手（${genreName}方向）。简洁专业地回答用户关于小说改编剧本的问题。回答控制在 200 字以内，点到即止。`;
 
-    // 如果有关联小说，直接送原文片段（前 3000 字），让 AI 能从原文中提取信息
+    // 如果有关联小说，直接送原文片段
     if (novelId) {
       const novel = await prisma.novel.findUnique({
         where: { id: novelId },
@@ -1883,73 +1866,69 @@ app.post("/api/chat/stream", async (req, res) => {
     const llmMessages: { role: string; content: string }[] = [
       { role: "system", content: systemPrompt },
     ];
-
-    // 添加历史消息
     for (const msg of existingMessages) {
       llmMessages.push({ role: msg.role, content: msg.content });
     }
-
-    // 添加当前用户消息
     llmMessages.push({ role: "user", content: message });
 
-    // 发送会话信息
-    sendEvent({ type: "meta", conversationId: conversation.id, title: conversation.title });
-
-    // 保存用户消息（异步，不阻塞 AI 调用）
-    const saveUserMsg = prisma.chatMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: "user",
-        content: message,
-      },
+    // 保存用户消息
+    const userMsg = await prisma.chatMessage.create({
+      data: { conversationId: conversation.id, role: "user", content: message },
     });
 
-    // 调用 DeepSeek 流式 AI 聊天
-    sendEvent({ type: "status", status: "generating" });
-    const stream = await deepseekClient.chat.completions.create({
-      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
-      messages: llmMessages as any,
-      temperature,
-      max_tokens: 1024,
-      stream: true,
-    });
+    // 调用 DeepSeek API
+    console.log("[chat] Calling DeepSeek...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-    let fullResponse = "";
-
-    for await (const chunk of stream) {
-      if (aborted) break;
-      const token = chunk.choices?.[0]?.delta?.content || "";
-      if (token) {
-        fullResponse += token;
-        sendEvent({ type: "token", token });
+    const deepseekRes = await fetch(
+      `${process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1"}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+          messages: llmMessages,
+          temperature,
+          max_tokens: 1024,
+          stream: false,
+        }),
+        signal: controller.signal,
       }
+    );
+    clearTimeout(timeoutId);
+
+    if (!deepseekRes.ok) {
+      const errText = await deepseekRes.text();
+      console.error("[chat] DeepSeek error:", deepseekRes.status, errText.substring(0, 200));
+      return res.status(502).json({ error: `AI 服务异常 (${deepseekRes.status})` });
     }
+
+    const data = await deepseekRes.json() as any;
+    const assistantContent = data.choices?.[0]?.message?.content || "";
+    console.log("[chat] Response:", assistantContent.length, "chars");
 
     // 保存助手回复
-    if (fullResponse) {
-      await prisma.chatMessage.create({
-        data: {
-          conversationId: conversation.id,
-          role: "assistant",
-          content: fullResponse,
-        },
-      });
-      await prisma.chatConversation.update({
-        where: { id: conversation.id },
-        data: { updatedAt: new Date() },
-      });
-    }
+    const assistantMsg = await prisma.chatMessage.create({
+      data: { conversationId: conversation.id, role: "assistant", content: assistantContent },
+    });
+    await prisma.chatConversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
 
-    if (!aborted) {
-      sendEvent({ type: "done", conversationId: conversation.id });
-    }
-    res.end();
+    // 返回完整结果
+    res.json({
+      conversationId: conversation.id,
+      userMessage: userMsg,
+      assistantMessage: assistantMsg,
+    });
   } catch (err: any) {
-    console.error("Chat stream error:", err.message);
-    if (!aborted) {
-      sendEvent({ type: "error", error: err.message });
-    }
-    res.end();
+    console.error("Chat error:", err.message);
+    res.status(500).json({ error: err.message || "AI 请求失败" });
   }
 });
 

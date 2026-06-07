@@ -397,11 +397,8 @@ export function deleteConversation(conversationId: string): Promise<{ ok: boolea
 }
 
 /**
- * SSE 流式聊天：返回 AbortController 用于取消
- * onToken: 收到新 token 时回调
- * onMeta: 收到会话元数据时回调
- * onDone: 流结束时回调
- * onError: 出错时回调
+ * 发送聊天消息（普通 JSON 请求/响应）
+ * 返回 { conversationId, userMessage, assistantMessage }
  */
 export function streamChat(
   params: {
@@ -431,41 +428,11 @@ export function streamChat(
         callbacks.onError?.(err.error || `HTTP ${res.status}`);
         return;
       }
-      const reader = res.body?.getReader();
-      if (!reader) {
-        callbacks.onError?.("无法读取响应流");
-        return;
-      }
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          try {
-            const event = JSON.parse(trimmed.slice(5).trim());
-            switch (event.type) {
-              case "meta":
-                callbacks.onMeta?.(event);
-                break;
-              case "token":
-                callbacks.onToken(event.token);
-                break;
-              case "done":
-                callbacks.onDone?.(event.conversationId);
-                break;
-              case "error":
-                callbacks.onError?.(event.error);
-                break;
-            }
-          } catch {}
-        }
-      }
+      const data = await res.json();
+      // 发送完整响应
+      callbacks.onMeta?.({ conversationId: data.conversationId, title: "" });
+      callbacks.onToken(data.assistantMessage.content);
+      callbacks.onDone?.(data.conversationId);
     })
     .catch((err) => {
       if (err.name !== "AbortError") {
