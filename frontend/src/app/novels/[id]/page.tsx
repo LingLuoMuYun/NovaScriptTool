@@ -619,6 +619,7 @@ export default function NovelDetailPage() {
               <ScriptViewer
                 scene={selectedScene}
                 characterNames={characters.map((c) => c.name)}
+                novelContent={novel?.content}
                 onScriptUpdate={handleScriptUpdate}
               />
             ) : (

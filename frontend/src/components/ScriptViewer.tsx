@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { Scene, Script, Annotation, updateScript, createAnnotation, updateAnnotation, deleteAnnotation, getSceneAnnotations } from "@/lib/api";
 import VersionHistory from "./VersionHistory";
 import MentionInput from "./MentionInput";
+import DualPaneEditor from "./DualPaneEditor";
 
 interface ScriptViewerProps {
   scene: Scene & { scripts?: Script[] };
   characterNames?: string[];
+  novelContent?: string;
   onRollback?: () => void;
   onScriptUpdate?: () => void;
 }
@@ -379,9 +381,10 @@ function CommentBubble({
   );
 }
 
-export default function ScriptViewer({ scene, characterNames = [], onRollback, onScriptUpdate }: ScriptViewerProps) {
+export default function ScriptViewer({ scene, characterNames = [], novelContent, onRollback, onScriptUpdate }: ScriptViewerProps) {
   const [showVersions, setShowVersions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isDualPane, setIsDualPane] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
@@ -494,6 +497,32 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
       setSaving(false);
     }
   };
+
+  // 双栏编辑模式
+  if (isDualPane && script && novelContent) {
+    return (
+      <div className="rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-gray-900 shadow-lg dark:shadow-gray-950/30 overflow-hidden ring-2 ring-indigo-100 dark:ring-indigo-900">
+        <DualPaneEditor
+          sceneId={scene.id}
+          sceneLabel={`Scene ${scene.sceneNum} — ${scene.location}`}
+          sceneMeta={{
+            sceneNum: scene.sceneNum,
+            location: scene.location,
+            timeOfDay: scene.timeOfDay,
+            isLocked: scene.isLocked,
+          }}
+          script={script}
+          novelContent={novelContent}
+          characterNames={characterNames}
+          onSaved={() => {
+            setIsDualPane(false);
+            onScriptUpdate?.();
+          }}
+          onCancel={() => setIsDualPane(false)}
+        />
+      </div>
+    );
+  }
 
   if (showVersions) {
     return (
@@ -673,8 +702,16 @@ export default function ScriptViewer({ scene, characterNames = [], onRollback, o
               onClick={handleStartEdit}
               className="rounded-full bg-indigo-100 dark:bg-indigo-900/40 px-3 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 transition"
             >
-              ✏️ 编辑
+              ✏️ 快速编辑
             </button>
+            {novelContent && (
+              <button
+                onClick={() => setIsDualPane(true)}
+                className="rounded-full bg-purple-100 dark:bg-purple-900/40 px-3 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/60 transition"
+              >
+                📝 详细编辑
+              </button>
+            )}
             <button
               onClick={() => setShowVersions(true)}
               className="rounded-full bg-gray-100 dark:bg-gray-800 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 dark:text-gray-600 hover:bg-indigo-100 dark:bg-indigo-900/40 hover:text-indigo-600 dark:text-indigo-400 transition"
