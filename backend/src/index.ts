@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import path from "path";
+import crypto from "crypto";
 import { PrismaClient } from "@prisma/client";
 import { mimoClient, deepseekClient, chatCompletion } from "./services/ai.service";
 import { cleanText, splitChapters, chunkByChars, analyzeText } from "./utils/text-processor";
@@ -10,6 +11,42 @@ import { initFTS5, search as fullTextSearch } from "./services/search.service";
 
 const prisma = new PrismaClient();
 const app = express();
+
+// ─── 内容哈希（分析缓存判定） ──────────────────────
+
+function contentHash(text: string): string {
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex").substring(0, 16);
+}
+
+async function getCachedAnalysis(novelId: string): Promise<{
+  plot: any;
+  characters: { name: string; roleType: string; traits: any; aliases: string[]; speechStyle: any }[];
+} | null> {
+  const novel = await prisma.novel.findUnique({
+    where: { id: novelId },
+    include: { characters: true },
+  });
+  if (!novel || !novel.analysis) return null;
+
+  const hash = contentHash(novel.content);
+  if (novel.contentHash !== hash) return null; // 内容已变更
+
+  if (novel.characters.length === 0) return null; // 无角色数据
+
+  try {
+    const plot = JSON.parse(novel.analysis);
+    const characters = novel.characters.map((c) => ({
+      name: c.name,
+      roleType: c.roleType,
+      traits: JSON.parse(c.traits || "{}"),
+      aliases: JSON.parse(c.aliases || "[]"),
+      speechStyle: JSON.parse(c.speechStyle || "{}"),
+    }));
+    return { plot, characters };
+  } catch {
+    return null;
+  }
+}
 const PORT = process.env.PORT || 4000;
 
 // --- 中间件 ---
@@ -56,6 +93,33 @@ app.get("/api/health", async (_req, res) => {
     res.json({ status: "ok", db: "connected" });
   } catch {
     res.json({ status: "ok", db: "disconnected" });
+  }
+});
+
+// --- 分析缓存状态 ---
+
+app.get("/api/novels/:id/cache-status", async (req, res) => {
+  try {
+    const novel = await prisma.novel.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, content: true, contentHash: true, analysis: true, status: true, _count: { select: { characters: true } } },
+    });
+    if (!novel) return res.status(404).json({ error: "小说不存在" });
+
+    const currentHash = contentHash(novel.content);
+    const isCached = !!(novel.contentHash && novel.contentHash === currentHash && novel.analysis && novel._count.characters > 0);
+
+    res.json({
+      novelId: novel.id,
+      status: novel.status,
+      currentHash,
+      storedHash: novel.contentHash || null,
+      isCached,
+      hasAnalysis: !!novel.analysis,
+      characterCount: novel._count.characters,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -363,53 +427,72 @@ app.post("/api/novels/:id/pipeline", async (req, res) => {
 
     const { runAnalysisPipeline, runScriptGenerationPipeline } = await import("./services/ai.service");
 
-    console.log(`🚀 一键流水线启动: ${novel.title}`);
+    const forceReanalyze = req.query.force === "true";
+    console.log(`🚀 一键流水线启动: ${novel.title}${forceReanalyze ? " (强制重分析)" : ""}`);
 
-    // 1. 分析
-    await prisma.novel.update({ where: { id: req.params.id }, data: { status: "analyzing" } });
-    console.log("📖 阶段 1/2: 剧情分析 + 角色提取");
-    const analysisResult = await runAnalysisPipeline(novel.content);
+    // 📦 分析缓存：检查内容是否变化，命中则跳过 Agent 1+2
+    let analysisResult: { plot: any; characters: any[] };
+    const hash = contentHash(novel.content);
 
-    await prisma.novel.update({
-      where: { id: req.params.id },
-      data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
-    });
-
-    // 存储角色（保留用户在人设实验室中配置的语言风格包）
-    const oldChars1 = await prisma.character.findMany({
-      where: { novelId: req.params.id },
-      select: { name: true, speechStyle: true },
-    });
-    const speechStyleMap1 = new Map<string, string>();
-    for (const c of oldChars1) {
-      if (c.speechStyle && c.speechStyle !== "{}") speechStyleMap1.set(c.name, c.speechStyle);
+    if (!forceReanalyze) {
+      const cached = await getCachedAnalysis(req.params.id);
+      if (cached) {
+        console.log(`  ⚡ 分析缓存命中！跳过 Agent 1+2，直接进入剧本生成`);
+        analysisResult = cached;
+      }
     }
 
-    await prisma.character.deleteMany({ where: { novelId: req.params.id } });
-    if (analysisResult.characters.length > 0) {
-      await prisma.character.createMany({
-        data: analysisResult.characters.map((c) => ({
-          novelId: req.params.id,
-          name: c.name,
-          aliases: JSON.stringify(c.aliases || []),
-          roleType: c.roleType || "配角",
-          traits: JSON.stringify(c.traits || {}),
-        })),
+    if (!analysisResult!) {
+      // 缓存未命中 → 执行完整分析
+      await prisma.novel.update({ where: { id: req.params.id }, data: { status: "analyzing" } });
+      console.log("📖 阶段 1/2: 剧情分析 + 角色提取");
+      analysisResult = await runAnalysisPipeline(novel.content);
+
+      await prisma.novel.update({
+        where: { id: req.params.id },
+        data: {
+          status: "analyzed",
+          analysis: JSON.stringify(analysisResult.plot),
+          contentHash: hash,
+        },
       });
 
-      // 恢复用户配置的语言风格包
-      if (speechStyleMap1.size > 0) {
-        const newChars1 = await prisma.character.findMany({
-          where: { novelId: req.params.id },
-          select: { id: true, name: true },
+      // 存储角色（保留用户在人设实验室中配置的语言风格包）
+      const oldChars1 = await prisma.character.findMany({
+        where: { novelId: req.params.id },
+        select: { name: true, speechStyle: true },
+      });
+      const speechStyleMap1 = new Map<string, string>();
+      for (const c of oldChars1) {
+        if (c.speechStyle && c.speechStyle !== "{}") speechStyleMap1.set(c.name, c.speechStyle);
+      }
+
+      await prisma.character.deleteMany({ where: { novelId: req.params.id } });
+      if (analysisResult.characters.length > 0) {
+        await prisma.character.createMany({
+          data: analysisResult.characters.map((c) => ({
+            novelId: req.params.id,
+            name: c.name,
+            aliases: JSON.stringify(c.aliases || []),
+            roleType: c.roleType || "配角",
+            traits: JSON.stringify(c.traits || {}),
+          })),
         });
-        for (const c of newChars1) {
-          const saved = speechStyleMap1.get(c.name);
-          if (saved) {
-            await prisma.character.update({
-              where: { id: c.id },
-              data: { speechStyle: saved },
-            });
+
+        // 恢复用户配置的语言风格包
+        if (speechStyleMap1.size > 0) {
+          const newChars1 = await prisma.character.findMany({
+            where: { novelId: req.params.id },
+            select: { id: true, name: true },
+          });
+          for (const c of newChars1) {
+            const saved = speechStyleMap1.get(c.name);
+            if (saved) {
+              await prisma.character.update({
+                where: { id: c.id },
+                data: { speechStyle: saved },
+              });
+            }
           }
         }
       }
@@ -874,7 +957,8 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
 
     const { runAnalysisPipeline, runScriptGenerationPipeline } = await import("./services/ai.service");
 
-    console.log(`🚀 SSE 流水线启动: ${novel.title}`);
+    const forceReanalyzeSSE = req.query.force === "true";
+    console.log(`🚀 SSE 流水线启动: ${novel.title}${forceReanalyzeSSE ? " (强制重分析)" : ""}`);
 
     // 统一定义 onProgress，同时写 SSE 和日志
     const onProgress = (event: any) => {
@@ -884,27 +968,42 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
       console.log(`  📡 SSE [${event.progress}%] ${event.message}${detail}`);
     };
 
-    // 1. 分析阶段
-    await prisma.novel.update({ where: { id: req.params.id }, data: { status: "analyzing" } });
-    onProgress({ stage: "analyze", progress: 0, message: "🚀 启动分析流水线..." });
+    // 📦 分析缓存：检查内容是否变化，命中则跳过 Agent 1+2
+    let analysisResult: { plot: any; characters: any[] };
+    const hashSSE = contentHash(novel.content);
 
-    const analysisResult = await runAnalysisPipeline(novel.content, onProgress);
-    if (aborted) return;
-
-    await prisma.novel.update({
-      where: { id: req.params.id },
-      data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
-    });
-
-    // 存储角色（保留用户在人设实验室中配置的语言风格包）
-    const oldCharsSSE = await prisma.character.findMany({
-      where: { novelId: req.params.id },
-      select: { name: true, speechStyle: true },
-    });
-    const speechStyleMapSSE = new Map<string, string>();
-    for (const c of oldCharsSSE) {
-      if (c.speechStyle && c.speechStyle !== "{}") speechStyleMapSSE.set(c.name, c.speechStyle);
+    if (!forceReanalyzeSSE) {
+      const cached = await getCachedAnalysis(req.params.id);
+      if (cached) {
+        console.log(`  ⚡ 分析缓存命中！跳过 Agent 1+2，直接进入剧本生成`);
+        analysisResult = cached;
+        onProgress({ stage: "analyze", progress: 100, message: "⚡ 分析缓存命中，跳过重复分析", detail: "内容未变化，使用已有结果" });
+      }
     }
+
+    if (!analysisResult!) {
+      // 缓存未命中 → 执行完整分析
+      // 1. 分析阶段
+      await prisma.novel.update({ where: { id: req.params.id }, data: { status: "analyzing" } });
+      onProgress({ stage: "analyze", progress: 0, message: "🚀 启动分析流水线..." });
+
+      analysisResult = await runAnalysisPipeline(novel.content, onProgress);
+      if (aborted) return;
+
+      await prisma.novel.update({
+        where: { id: req.params.id },
+        data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot), contentHash: hashSSE },
+      });
+
+      // 存储角色（保留用户在人设实验室中配置的语言风格包）
+      const oldCharsSSE = await prisma.character.findMany({
+        where: { novelId: req.params.id },
+        select: { name: true, speechStyle: true },
+      });
+      const speechStyleMapSSE = new Map<string, string>();
+      for (const c of oldCharsSSE) {
+        if (c.speechStyle && c.speechStyle !== "{}") speechStyleMapSSE.set(c.name, c.speechStyle);
+      }
 
     await prisma.character.deleteMany({ where: { novelId: req.params.id } });
     if (analysisResult.characters.length > 0) {
@@ -935,6 +1034,7 @@ app.get("/api/novels/:id/pipeline-stream", async (req, res) => {
         }
       }
     }
+    } // end if (!analysisResult!) — 缓存未命中分支
 
     // 2. 场景生成阶段（从数据库重新获取角色以包含 speechStyle）
     const dbCharsSSE = await prisma.character.findMany({
@@ -2195,15 +2295,27 @@ app.post("/api/novels/:id/pipeline/queue", async (req, res) => {
       async (onProgress) => {
         const { runAnalysisPipeline, runScriptGenerationPipeline } = await import("./services/ai.service");
 
+        // 📦 分析缓存检查
+        let analysisResultQ: { plot: any; characters: any[] };
+        const hashQ = contentHash(novelContent);
+        const cachedQ = await getCachedAnalysis(novelId);
+        if (cachedQ) {
+          console.log(`  ⚡ [Queue] 分析缓存命中！跳过 Agent 1+2`);
+          analysisResultQ = cachedQ;
+          onProgress({ stage: "analyze", progress: 100, message: "⚡ 分析缓存命中，跳过重复分析" });
+        }
+
+        if (!analysisResultQ!) {
         // Phase 1: 分析
         await prisma.novel.update({ where: { id: novelId }, data: { status: "analyzing" } });
         onProgress({ stage: "analyze", progress: 0, message: "🚀 启动分析流水线..." });
 
         const analysisResult = await runAnalysisPipeline(novelContent, onProgress);
+        analysisResultQ = analysisResult;
 
         await prisma.novel.update({
           where: { id: novelId },
-          data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot) },
+          data: { status: "analyzed", analysis: JSON.stringify(analysisResult.plot), contentHash: hashQ },
         });
 
         // 存储角色（保留用户在人设实验室中配置的语言风格包）
@@ -2217,9 +2329,9 @@ app.post("/api/novels/:id/pipeline/queue", async (req, res) => {
         }
 
         await prisma.character.deleteMany({ where: { novelId } });
-        if (analysisResult.characters.length > 0) {
+        if (analysisResultQ.characters.length > 0) {
           await prisma.character.createMany({
-            data: analysisResult.characters.map((c) => ({
+            data: analysisResultQ.characters.map((c) => ({
               novelId,
               name: c.name,
               aliases: JSON.stringify(c.aliases || []),
@@ -2245,6 +2357,7 @@ app.post("/api/novels/:id/pipeline/queue", async (req, res) => {
             }
           }
         }
+        } // end if (!analysisResultQ!) — 缓存未命中分支
 
         // Phase 2: 生成剧本（从数据库重新获取角色以包含 speechStyle）
         onProgress({ stage: "generate", progress: 50, message: "🎬 启动场景规划与剧本生成..." });

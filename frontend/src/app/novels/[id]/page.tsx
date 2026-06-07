@@ -17,7 +17,8 @@ import SceneEditor from "@/components/SceneEditor";
 import AnalysisDashboard from "@/components/AnalysisDashboard";
 import ChatPanel from "@/components/ChatPanel";
 import GlobalSearch from "@/components/GlobalSearch";
-import { buildDeps, analyzeImpact, runIncrementalPipeline, getDepsStatus, getChangedScenes } from "@/lib/api";
+import { buildDeps, analyzeImpact, runIncrementalPipeline, getDepsStatus, getChangedScenes, getCacheStatus } from "@/lib/api";
+import type { CacheStatus } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -36,6 +37,7 @@ export default function NovelDetailPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [pipelining, setPipelining] = useState(false);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
   const [pipelineStep, setPipelineStep] = useState("");
   // SSE 进度状态
   const [pipeProgress, setPipeProgress] = useState(0);
@@ -79,6 +81,7 @@ export default function NovelDetailPage() {
 
   useEffect(() => {
     fetchNovel().finally(() => setLoading(false));
+    getCacheStatus(id).then(setCacheStatus).catch(() => {});
   }, [fetchNovel]);
 
   const handleAnalyzed = useCallback((result: any) => {
@@ -417,6 +420,18 @@ export default function NovelDetailPage() {
             <>🚀 一键生成（分析 + 剧本）</>
           )}
         </button>
+
+        {/* 缓存状态指示 */}
+        {cacheStatus?.isCached && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 dark:bg-green-950 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800" title="内容未变化，再次运行将跳过 AI 分析">
+            ⚡ 分析已缓存
+          </span>
+        )}
+        {cacheStatus && !cacheStatus.isCached && cacheStatus.hasAnalysis && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" title="内容已变更，下次运行将重新分析">
+            ⚠️ 内容已变更
+          </span>
+        )}
 
         {/* 分步操作 */}
         {novel.status === "draft" && (

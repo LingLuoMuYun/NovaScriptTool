@@ -476,6 +476,20 @@ export interface ValidationResult {
   }[];
 }
 
+export interface CacheStatus {
+  novelId: string;
+  status: string;
+  currentHash: string;
+  storedHash: string | null;
+  isCached: boolean;
+  hasAnalysis: boolean;
+  characterCount: number;
+}
+
+export function getCacheStatus(novelId: string): Promise<CacheStatus> {
+  return request(`/api/novels/${novelId}/cache-status`);
+}
+
 export function validateScripts(novelId: string): Promise<ValidationResult> {
   return request(`/api/novels/${novelId}/validate`);
 }

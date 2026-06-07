@@ -8,13 +8,14 @@ datasource db {
 }
 
 model Novel {
-  id        String      @id @default(uuid())
-  title     String
-  content   String
-  status    String      @default("draft")
-  analysis  String?     // JSON: 剧情分析结果 (outline, timeline, conflicts)
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
+  id          String      @id @default(uuid())
+  title       String
+  content     String
+  status      String      @default("draft")
+  analysis    String?     // JSON: 剧情分析结果 (outline, timeline, conflicts)
+  contentHash String?     @map("content_hash") // SHA256: 内容指纹，用于分析缓存判定
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
   characters         Character[]
   scenes             Scene[]
