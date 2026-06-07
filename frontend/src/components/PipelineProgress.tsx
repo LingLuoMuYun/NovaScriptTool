@@ -5,7 +5,15 @@ interface PipelineProgressProps {
   stage: string;
   message: string;
   detail?: string;
-  stats?: { characters?: number; scenes?: number; currentScene?: number; totalScenes?: number };
+  stats?: {
+    characters?: number;
+    scenes?: number;
+    currentScene?: number;
+    totalScenes?: number;
+    currentWindow?: number;
+    totalWindows?: number;
+    totalChapters?: number;
+  };
   error?: string;
   isRunning: boolean;
 }
@@ -19,6 +27,9 @@ const STEPS = [
 ];
 
 const STAGE_ORDER = ["", "analyze", "characters", "scenes", "scripts", "save", "done"];
+
+// 分块模式下的额外阶段
+const CHUNK_STAGES = ["chunking", "chunk_analyze", "merging"];
 
 function getStepStatus(stepKey: string, stage: string) {
   const currentIdx = STAGE_ORDER.indexOf(stage);
@@ -152,9 +163,31 @@ export default function PipelineProgress({
             <p className="mt-1 text-xs text-gray-500">{detail}</p>
           )}
 
+          {/* 分块模式进度 */}
+          {stats?.currentWindow && stats?.totalWindows && (
+            <div className="mt-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-medium text-indigo-600">
+                  📖 分块分析 {stats.currentWindow}/{stats.totalWindows}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
+                <div
+                  className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                  style={{ width: `${Math.round((stats.currentWindow / stats.totalWindows) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* 统计信息 */}
-          {stats && (stats.characters || stats.scenes) && (
-            <div className="mt-3 flex gap-4 text-xs text-gray-500">
+          {stats && (stats.characters || stats.scenes || stats.totalChapters) && (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+              {stats.totalChapters && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-3 py-1 text-teal-600">
+                  📚 {stats.totalChapters} 个章节
+                </span>
+              )}
               {stats.characters && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-indigo-600">
                   👤 {stats.characters} 个角色

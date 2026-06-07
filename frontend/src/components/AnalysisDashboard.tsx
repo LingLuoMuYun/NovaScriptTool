@@ -1,8 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import PlotOutline from "./PlotOutline";
-import CharacterNetworkGraph from "./CharacterNetworkGraph";
 import { Character } from "@/lib/api";
+
+const CharacterNetworkGraph = dynamic(() => import("./CharacterNetworkGraph"), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+      <p className="text-gray-400">⏳ 加载关系图中...</p>
+    </div>
+  ),
+});
 
 interface AnalysisDashboardProps {
   novelId: string;

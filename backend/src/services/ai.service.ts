@@ -365,11 +365,20 @@ export function parseAIJson(content: string): any {
 // --- 进度回调类型 ---
 
 export interface PipelineProgress {
-  stage: 'analyze' | 'characters' | 'scenes' | 'scripts' | 'save' | 'done' | 'error';
+  stage: 'analyze' | 'characters' | 'scenes' | 'scripts' | 'save' | 'done' | 'error'
+    | 'chunking' | 'chunk_analyze' | 'merging';
   progress: number;   // 0-100
   message: string;
   detail?: string;
-  stats?: { characters?: number; scenes?: number; currentScene?: number; totalScenes?: number };
+  stats?: {
+    characters?: number;
+    scenes?: number;
+    currentScene?: number;
+    totalScenes?: number;
+    currentWindow?: number;
+    totalWindows?: number;
+    totalChapters?: number;
+  };
 }
 
 export type ProgressCallback = (event: PipelineProgress) => void;
@@ -404,18 +413,55 @@ export interface AnalysisResult {
 /**
  * 执行 Agent 1 + Agent 2 分析流水线
  * Agent 1: 剧情解构 → Agent 2: 角色图谱
+ * 长篇自动启用分块模式 (滑动窗口上下文拼接)
  * 内置降级策略：如遇安全拦截，自动缩短文本并关闭思维模式重试
  */
 export async function runAnalysisPipeline(
   novelContent: string,
   onProgress?: ProgressCallback
 ): Promise<AnalysisResult> {
-  // 文本预处理：如果太长，取前 15000 字做分析
+  const progress = (event: PipelineProgress) => onProgress?.(event);
+
+  // 判断是否需要分块模式
+  const { splitChapters } = await import("../utils/text-processor");
+  const chapters = splitChapters(novelContent);
+  const needsChunking =
+    novelContent.length > 15000 || chapters.length > 5;
+
+  if (needsChunking) {
+    console.log(`📚 检测到长文本 (${novelContent.length} 字, ${chapters.length} 章)，启用分块分析模式`);
+    progress({
+      stage: "chunking",
+      progress: 0,
+      message: `📚 长文本检测: ${novelContent.length} 字, ${chapters.length} 章 → 启用分块分析`,
+      stats: { totalChapters: chapters.length },
+    });
+
+    try {
+      const { runChunkedAnalysisPipeline } = await import("./chunked-pipeline.service");
+      const result = await runChunkedAnalysisPipeline(novelContent, onProgress);
+
+      return {
+        plot: result.plot,
+        characters: result.characters,
+      };
+    } catch (err: any) {
+      const msg = err.message || "";
+      if (msg.includes("安全") || msg.includes("rejected") || msg.includes("high risk")) {
+        // 分块模式安全拦截 → 降级为单次短文本分析
+        console.log("  ⚠️ 分块分析被安全拦截，降级为单次短文本分析...");
+        progress({ stage: 'analyze', progress: 5, message: '⚠️ 内容被安全拦截，正在降级重试...' });
+        const fallbackContent = novelContent.substring(0, 5000) + "\n\n[安全降级：已截取前5000字]";
+        return await _doAnalysis(fallbackContent, { thinking: false }, onProgress);
+      }
+      throw err;
+    }
+  }
+
+  // 短篇小说：使用常规单次分析
   const truncatedContent = novelContent.length > 15000
     ? novelContent.substring(0, 15000) + "\n\n[文本过长，已截取前15000字分析...]"
     : novelContent;
-
-  const progress = (event: PipelineProgress) => onProgress?.(event);
 
   // 尝试主策略
   try {

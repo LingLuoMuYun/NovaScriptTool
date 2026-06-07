@@ -15,6 +15,7 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [uploadStats, setUploadStats] = useState<{ chapters: number; chars: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback(async () => {
@@ -26,11 +27,19 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
 
     setUploading(true);
     try {
-      await createNovel(title || undefined, content || undefined, file || undefined);
+      const result = await createNovel(title || undefined, content || undefined, file || undefined);
       setTitle("");
       setContent("");
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      // 显示上传统计
+      if ((result as any).stats) {
+        setUploadStats({
+          chapters: (result as any).stats.estimatedChapters || 1,
+          chars: (result as any).stats.totalChars || 0,
+        });
+        setTimeout(() => setUploadStats(null), 5000);
+      }
       onUploaded();
     } catch (err: any) {
       setError(err.message);
@@ -150,6 +159,22 @@ export default function NovelUpload({ onUploaded }: NovelUploadProps) {
         <p className="mt-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
           ❌ {error}
         </p>
+      )}
+
+      {/* 上传统计 */}
+      {uploadStats && (
+        <div className="mt-3 rounded-lg bg-emerald-50 px-4 py-2.5 border border-emerald-100 animate-fade-in">
+          <p className="text-sm font-medium text-emerald-700">✅ 上传成功</p>
+          <div className="mt-1 flex gap-3 text-xs text-emerald-600">
+            <span>📚 {uploadStats.chapters} 个章节</span>
+            <span>📝 {uploadStats.chars.toLocaleString()} 字</span>
+            {uploadStats.chars > 15000 && (
+              <span className="text-amber-600 font-medium">
+                ⚡ 将自动启用分块分析
+              </span>
+            )}
+          </div>
+        </div>
       )}
 
       {/* 提交按钮 */}
